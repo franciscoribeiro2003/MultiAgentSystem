@@ -2,17 +2,25 @@
 Work for the course of Introduction to Intelligent Autonomous Systems (CC3042) of University of Porto
 
 ---
+## Tech Stack:
+- XMPP Server (Prosody) - ejabberd
+- Python-Spade
 
+
+---
 ## THEME: A. Multi-Agent Traffic Control Simulation
 
-#### Overview
+### Overview
 The aim is to design and implement a multi-agent system to efficiently manage traffic across multiple intersections. The agents should communicate with each other and coordinate to manage traffic signals, aiming to minimize waiting times and enhance traffic flow.
 
-#### Objectives
+
+### Objectives
 Implement intelligent traffic light agents that can adapt to real-time traffic conditions.
 Use vehicle agents that generate simplified but realistic traffic patterns.
 Integrate these agents to work in a coordinated way to optimize traffic flow.
-#### Features
+
+
+### Features
 Traffic Environment: The environment where the agents live can be based on a grid-like set of roads and intersections.
 Traffic Light Agents: Each traffic light intersection is controlled by an agent. The agent manages the light timings (Red, Green, Yellow) based on the current traffic conditions and in coordination with other intersection agents.
 Vehicle Agents: Simulate vehicle agents approaching the intersections and reacting to the traffic lights. They can report waiting times and perhaps even request green lights if waiting time exceeds a certain limit.
