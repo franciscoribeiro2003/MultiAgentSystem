@@ -30,6 +30,36 @@ Real-Time Adjustments: Traffic light agents could adapt to traffic conditions, p
 Performance Metrics: Implement metrics to measure the efficiency of traffic management in terms of waiting time, the number of vehicles going through, etc.
 
 ---
+## Milestones
+### Week 1: Research & Planning
+
+Research SPADE/JADE features and functionalities.
+Define roles and functionalities for different agents.
+
+### Week 2-3: Basic Implementations
+
+Implement the traffic environment.    
+Implement basic Traffic Light Agents.
+Implement simple Vehicle Agents.
+
+### Week 4: Intermediate Implementations
+
+Implement communication between agents.
+Design and implement coordination strategies for Traffic Light Agents.
+
+### Week 5: Advanced Features
+
+Introduce the Central Coordination Agent.
+Implement emergency vehicle priority.
+Implement rerouting for Vehicle Agents in reaction to traffic conditions.
+
+### Week 6: Testing & Documentation
+
+Final testing and debugging.
+Document the code and prepare a presentation reporting the work done.
+
+
+---
 ## Step-by-step
 
 ### 1. Understand the Requirements:
