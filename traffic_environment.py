@@ -8,77 +8,64 @@ import asyncio
 import spade
 import pygame
 
+# Seed the random number generator with the current system time
+random.seed(time.time())
 
-# Grid of cordinates for the environment 100x100
-grid = [[0 for x in range(100)] for y in range(100)]
+traffic_lights_grid = [[None for _ in range(100)] for _ in range(100)]
+vehicles_grid = [[None for _ in range(100)] for _ in range(100)]
+lanes_grid = [[None for _ in range(100)] for _ in range(100)]
+intersections_grid = [[None for _ in range(100)] for _ in range(100)]
 
 class Map:
     def __init__(self):
         pass
-        
-    def whereiam(self, x, y):
-        return grid[x][y]
-    
-    def WhatsNorth(self, x, y):
-        return grid[x][y+1]
 
-    def WhatsSouth(self, x, y):
-        return grid[x][y-1]
+
+    def update_traffic_lights(self, x, y, info):
+        traffic_lights_grid[x][y] = info
+
+    def update_vehicles(self, x, y, info):
+        vehicles_grid[x][y] = info
+
+    def update_lanes(self, x, y, info):
+        if lanes_grid[x][y] is None:
+            lanes_grid[x][y] = [] 
+        
+        lanes_grid[x][y].append(info)
+        
+
+    def update_intersections(self, x, y, info):
+        intersections_grid[x][y] = info
     
-    def WhatsEast(self, x, y):
-        return grid[x+1][y]
-    
-    def WhatsWest(self, x, y):
-        return grid[x-1][y]
-    
-    def WhatsNext(self, x,y):
+    def WhatsNextLane(self, x,y):
         # display the movements avaible for the car, so if it is in the intersection display the lanes that the car can go, if it is in the lane display the next lane
         # use spade to get the position of the car and sent him the next avaible positions so he can go to
-        vehicle_position = (x,y)
-        
-        if grid[x][y].split(' ')[0] == 'intersection':
-            pass
-            Intersection_id = grid[x][y].split(' ')[1]
-            # rods from the intersection id
-            roads = []
-            for i in range(len(env.intersections)):
-                if env.intersections[i].name == Intersection_id:
-                    intersection = env.intersections[i]
-                    for k in range(len(env.roads)):
-                        if env.roads[k] == intersection.road1:
-                            roads.append(intersection.road1)
-                        elif env.roads[k] == intersection.road2:
-                            roads.append(intersection.road2)
-                    break
-            # get the lanes from the roads
+
+        if lanes_grid[x][y] is not None:
+            # if the car is in a lane
+            # get the next position from the lane id
             lanes = []
-            for i in range(len(roads)):
-                lanes.append(roads[i].lanes)
-            # return the roads.lanes avaible at the intersection
-            return lanes
-         
-        if grid[x][y].split(' ')[0] == 'lane':
-            # how to get lane id the lane i the grid is displayed like this "lane {id}", so remove the 'lane' and get the id
-            lane_id = int(grid[x][y].split(' ')[1])
-            # get the next position from the lane id
-            
+            # get all the ids of the lanes_grid and then acess that lanes by id and get the next position or positions
             for i in range(len(env.lanes)):
-                if env.lanes[i].lane_id == lane_id:
-                    lanes = [env.lanes[i].next_position(x,y)]
-                    return lanes
-                
-        if grid[x][y].split(' ')[0] == 'traffic_light':
-            # how to get lane id the lane i the grid is displayed like this "lane {id}", so remove the 'lane' and get the id
-            traffic_light_id = int(grid[x][y].split(' ')[1])
-            # get the next position from the lane id
-            
-            for i in range(len(env.traffic_lights)):
-                if env.traffic_lights[i].id == traffic_light_id:
-                    lanes = [env.traffic_lights[i].cordX, env.traffic_lights[i].cordY]
-                    return lanes
-        return 0
-                    
-        
+                for k in range(len(lanes_grid[x][y])):
+                    if env.lanes[i].lane_id == lanes_grid[x][y][k]:
+                        lanes.append(env.lanes[i].next_position(x,y))                        
+                        break
+            return lanes
+
+    def IsThereTrafficLight(self, x, y):
+        # check if there is a traffic light in the position
+        if traffic_lights_grid[x][y] is not None or traffic_lights_grid[x][y] != 0:
+            return traffic_lights_grid[x][y]
+        return False
+    
+    def IsThereCar(self, x, y):
+        #print (f"Verificar          {x, y}, {vehicles_grid[x][y]}")
+        # check if there is a car in the position
+        if vehicles_grid[x][y] is None or vehicles_grid[x][y]  == 0:
+            #print ("checkk")
+            return False
+        return vehicles_grid[x][y]
 
 
     async def draw_map(self):
@@ -91,6 +78,7 @@ class Map:
         intersection_color = (105, 105, 105)  # Dark Gray
         null_color = (0, 0, 0)  # Black
         car_pink = (255, 192, 203)  # Pink
+        greenback = (0, 200, 100)  # Green background
 
         traffic_light_colors = {
             'Green': (0, 255, 0),
@@ -99,34 +87,62 @@ class Map:
             'Intermitent': (255, 165, 0)  # Orange for Intermitent
         }
         running = True
+
         while running:
+            xs = []
+            ys = []
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
 
-            screen.fill((0, 255, 0))  # Green background
+            screen.fill(greenback)  # Green background
 
             # Draw grid
             cell_size = screen_width // 100  # Assuming 100x100 grid
             for x in range(100):
                 for y in range(100):
-                    rect = pygame.Rect(x * cell_size, y * cell_size, cell_size, cell_size)
-                    if grid[x][y] == 0:
-                        pygame.draw.rect(screen, null_color, rect)
-                    elif grid[x][y].split(' ')[0] == 'lane':
-                        pygame.draw.rect(screen, lane_color, rect)
-                    elif grid[x][y].split(' ')[0] == 'intersection':
-                        pygame.draw.rect(screen, intersection_color, rect)
-                    elif grid[x][y].split(' ')[0] == 'traffic_light':
-                        tl_id = int(grid[x][y].split(' ')[1])
+                    if lanes_grid[x][y] is not None:
+                        pygame.draw.rect(screen, lane_color, (x * cell_size, y * cell_size, cell_size, cell_size))
+
+                    if intersections_grid[x][y] is not None:
+                        pygame.draw.rect(screen, intersection_color, (x * cell_size, y * cell_size, cell_size, cell_size))
+
+                    if traffic_lights_grid[x][y] is not None:
+                        tl_id = (traffic_lights_grid[x][y])
                         color = 'Red' 
                         for tl in env.traffic_lights:
                             if tl.id == tl_id:
                                 color = tl.get_color()
                                 break
-                        pygame.draw.rect(screen, traffic_light_colors[color], rect)
-                    elif grid[x][y].split(' ')[0] == 'car':
-                        pygame.draw.rect(screen, car_pink, rect)
+                        pygame.draw.rect(screen, traffic_light_colors[color], (x * cell_size, y * cell_size, cell_size, cell_size))
+
+                    
+                    if (vehicles_grid[x][y] is not None and vehicles_grid[x][y] != 0) :
+                        print(f"painting over------{x, y}, {vehicles_grid[x][y]}")
+                        pygame.draw.rect(screen, car_pink, (x * cell_size, y * cell_size, cell_size, cell_size))
+                        xs.append(x)
+                        ys.append(y)
+                    #await asyncio.sleep(0.01)
+            for i in range(len(xs)):
+                    if lanes_grid[xs[i]][ys[i]] is not None:
+                        pygame.draw.rect(screen, lane_color, (x * cell_size, y * cell_size, cell_size, cell_size))
+
+                    if intersections_grid[xs[i]][ys[i]] is not None:
+                        pygame.draw.rect(screen, intersection_color, (x * cell_size, y * cell_size, cell_size, cell_size))
+
+                    if traffic_lights_grid[xs[i]][ys[i]] is not None:
+                        tl_id = (traffic_lights_grid[x][y])
+                        color = 'Red' 
+                        for tl in env.traffic_lights:
+                            if tl.id == tl_id:
+                                color = tl.get_color()
+                                break
+                        pygame.draw.rect(screen, traffic_light_colors[color], (x * cell_size, y * cell_size, cell_size, cell_size))
+                    pygame.draw.rect(screen, greenback, (x * cell_size, y * cell_size, cell_size, cell_size))
+                    if (vehicles_grid[x][y] is not None and vehicles_grid[x][y] != 0) :
+                        pygame.draw.rect(screen, car_pink, (x * cell_size, y * cell_size, cell_size, cell_size))
+
+                    
             pygame.display.flip()
             await asyncio.sleep(0.1)
 
@@ -146,7 +162,8 @@ class TrafficLight:
         self.road = road
         self.cordX = cordX
         self.cordY = cordY
-        grid[cordX][cordY] = f'traffic_light {str(self.id)}'
+        self.map=Map()
+        self.map.update_traffic_lights(cordX, cordY, id)
 
     def change(self, new_colorfront, new_colorleft):
         self.colorfront = new_colorfront
@@ -192,10 +209,10 @@ class Intersection:
         self.road1 = road1
         self.road2 = road2
         self.tlights = []
-        grid
         self.x = x
         self.y = y
-        grid[x][y] = f'intersection {self.name}'
+        self.map=Map()
+        self.map.update_intersections(x, y, name)
 
     # traffic lights
     def add_tlight(self, tlight):
@@ -253,42 +270,112 @@ class Car:
         self.car_id = car_id
         self.x = x
         self.y = y
+        self.map=Map()
+        self.map.update_vehicles(x, y, car_id)
 
     def move(self, x, y):
         print(f"Car {self.car_id} moved from ({self.x},{self.y}) to ({x},{y})")
         self.x = int(x)
         self.y = int(y)
+        self.map.update_vehicles(self.x, self.y, self.car_id)
+        print(f"Car is in {self.x, self.y}, and the map is {vehicles_grid[self.x][self.y]}, so the car is {self.car_id}")
 
     def travel(self):
-        map_instance = Map()
-        print (grid[self.x][self.y])
-        what_next = map_instance.WhatsNext(self.x, self.y)
-        
-        # if its a tupple
-        if len(what_next)==1: 
-            self.move(what_next[0][0],what_next[0][1])
-        elif len(what_next)>1:
-            #choose random position from the list
-            lane=random.choice(what_next)
-            # find the next postion of the lane            
-            # get the next position from the lane id
-            lanes = [(0,0)]
-            for i in range(len(env.lanes)):
-                if env.lanes[i].lane_id == lane:
-                    lanes = [env.lanes[i].next_position(self.x,self.y)]
-                    break
+        whatsnextlanes = self.map.WhatsNextLane(self.x, self.y)
+        if whatsnextlanes is not None:
+            nextmove = random.choice(whatsnextlanes)
+            return nextmove
+        return None
 
-            self.move(lanes[0][0],lanes[0][1])
+    def IsThereTrafficLight(self, nextmove):
+        if self.map.IsThereTrafficLight(nextmove[0], nextmove[1]) is not False:
+            # check if there is a traffic light in the next position
+            tl_id = self.map.IsThereTrafficLight(nextmove[0], nextmove[1])
+            for tl in env.traffic_lights:
+                if tl.id == tl_id:
+                    if tl.get_color() == 'Red':
+                        # if the traffic light is red, the car will wait
+                        tl.num_cars_waiting += 1
+                        while tl.get_color() == 'Red':
+                            return True
+                        tl.num_cars_waiting -= 1
+                        break
+                    elif tl.get_color() == 'Yellow':
+                        # if the traffic light is yellow, the car will wait
+                        tl.num_cars_waiting += 1
+                        while tl.get_color() == 'Yellow':
+                            return True
+                        tl.num_cars_waiting -= 1
+                        break
+                    else:
+                        # if the traffic light is green, the car will move
+                        return False
 
+
+    def IsThereCarRight(self, nextmove):
+        # check if there is a car in the next position or at the right of the next position, so see the current position and the next to see what is going to be the right
+        # the right of the next position should have priority so return true if there is a car in the right of the next position
+        # to find the right of the next position, we need to see the current position and the next position, build a vector to find the direction of the movement, ot then see whats on the right
+        vector = (nextmove[0]-self.x, nextmove[1]-self.y)
+        newxplus= nextmove[0]+1
+        newyplus= nextmove[1]+1
+        newxminus= nextmove[0]-1
+        newyminus= nextmove[1]-1
+
+        if vector == (0,1):
+            # going up (down visually)
+            if (newxminus<0): return False
+            if self.map.IsThereCar(nextmove[0]-1, nextmove[1]) is not False:
+                return True
+        elif vector == (0,-1):
+            # going down (up visually)
+            if (newxplus>99): return False
+            if self.map.IsThereCar(nextmove[0]+1, nextmove[1]) is not False:
+                return True
+        elif vector == (1,0):
+            # going right
+            if (newyplus>99): return False
+            if self.map.IsThereCar(nextmove[0], nextmove[1]+1) is not False:
+                return True
+        elif vector == (-1,0):
+            # going left
+            if (newyminus<0): return False
+            if self.map.IsThereCar(nextmove[0], nextmove[1]-1) is not False:
+                return True        
+        if self.map.IsThereCar(nextmove[0], nextmove[1]) is not False:
+            return True
+        return False
 
     speed = 2
     async def run(self):
         while True:
-            self.travel()
-            tem=grid[self.x][self.y]
-            grid[self.x][self.y]=f'car {self.car_id}'
+            nextmove=self.travel()
+            if nextmove is not None:
+                if self.IsThereTrafficLight(nextmove) is not True:
+                    if self.map.IsThereCar(nextmove[0], nextmove[1]) is not True:
+                        if self.IsThereCarRight(nextmove) is not True:
+                            pastx=self.x
+                            pasty=self.y
+                            self.move(nextmove[0], nextmove[1])
+                            print(f"___________presente {self.x, self.y}_____________")
+                            self.map.update_vehicles(pastx, pasty, 0)
+                        else:
+                            print(f"Car {self.car_id} is waiting for the car(s) passing by")
+                            await asyncio.sleep(1)
+                            continue
+                    else:
+                        print(f"Car {self.car_id} is waiting for the car in front to move")
+                        await asyncio.sleep(1)
+                        continue
+                else:
+                    print(f"Car {self.car_id} is waiting for the traffic light to change")
+                    await asyncio.sleep(1)
+                    continue
+            else:
+                print("No road finded, car is waiting")
+                await asyncio.sleep(1)
+                continue
             await asyncio.sleep(1)
-            grid[self.x][self.y]=tem
 
 
 
@@ -307,21 +394,24 @@ class Lane:
         self.lane_id = lane_id
         self.cars = []
         self.lane = []
+        self.map=Map()
 
     def add_car(self, car):
         self.cars.append(car)
 
-    # ((x,y) , (x,y) , (x,y) , (x,y)) a car only can travel on this positions per order
-    def add_lane(self, lane):
-        self.lane.append(lane)
-        for i in range(len(lane)):
-            grid[lane[i][0]][lane[i][1]] = f"lane {str(self.lane_id)}"
+    def add_lane(self, *args):
+        for lane_coord in args:
+            self.lane.append(lane_coord)
+            x, y = lane_coord
+            self.map.update_lanes(x, y, self.lane_id)
 
     def next_position(self, x, y):
         # get the next position from the lane id
-        for i in range(len(self.lane[0])):
-            if int(self.lane[0][i][0]) == int(x) and int(self.lane[0][i][1]) == int(y):
-                lanes = self.lane[0][i-1]
+        for i in range(len(self.lane)):
+            if int(self.lane[i][0]) == int(x) and int(self.lane[i][1]) == int(y):
+                if (i+1) == len(self.lane):
+                    return None
+                lanes = self.lane[i+1]
                 return lanes
 
 
@@ -329,6 +419,7 @@ class Road:
     def __init__(self, name, num_lanes):
         self.name = name
         self.lanes = [Lane(i) for i in range(num_lanes)]
+        self.map=Map()
 
     def add_lane(self, lane):
         self.lanes.append(lane)
@@ -340,6 +431,8 @@ class Road:
 
 class Environment:
     def __init__(self):
+
+
         road_1 = Road("Road_1", 2)  # 2 lanes
         road_2 = Road("Road_2", 2)  # 2 lanes
         road_3 = Road("Road_3", 2)
@@ -355,15 +448,16 @@ class Environment:
         road_1.add_lane(lane1)
         road_1.add_lane(lane2)
 
-        lane1.add_lane(((0,0), (0,1), (0,2), (0,3), (0,4), (1,4), (2,4), (3,4), (4,4), (5,4), (6,4), (7,4), (8,4), (9,4), (10,4), (11,4), (12,4), (13,4), (14,4), (15,4), (16,4), (17,4), (18,4), (19,4), (20,4), (21,4), (22,4), (23,4), (24,4), (25,4), (26,4), (27,4), (28,4), (29,4), (30,4), (31,4), (32,4), (33,4), (34,4), (35,4), (36,4), (37,4), (38,4), (39,4), (40,4), (41,4), (42,4), (43,4), (44,4), (45,4), (46,4), (47,4), (48,4), (49,4), (50,4), (51,4), (52,4), (53,4), (54,4), (55,4), (56,4), (57,4), (58,4), (59,4), (60,4), (61,4), (62,4), (63,4), (64,4), (65,4), (66,4), (67,4), (68,4), (69,4), (70,4), (71,4), (72,4), (73,4), (74,4), (75,4), (76,4), (77,4), (78,4), (79,4), (80,4), (81,4), (82,4), (83,4), (84,4), (85,4), (86,4), (87,4), (88,4), (89,4), (90,4), (91,4), (92,4), (93,4), (94,4), (95,4), (96,4), (97,4), (98,4), (99,4)))
-        lane2.add_lane(((1,0), (1,1), (1,2), (1,3), (2,3), (3,3), (4,3), (5,3), (6,3), (7,3), (8,3), (9,3), (10,3), (11,3), (12,3), (13,3), (14,3), (15,3), (16,3), (17,3), (18,3), (19,3), (20,3), (21,3), (22,3), (23,3), (24,3), (25,3), (26,3), (27,3), (28,3), (29,3), (30,3), (31,3), (32,3), (33,3), (34,3), (35,3), (36,3), (37,3), (38,3), (39,3), (40,3), (41,3), (42,3), (43,3), (44,3), (45,3), (46,3), (47,3), (48,3), (49,3), (50,3), (51,3), (52,3), (53,3), (54,3), (55,3), (56,3), (57,3), (58,3), (59,3), (60,3), (61,3), (62,3), (63,3), (64,3), (65,3), (66,3), (67,3), (68,3), (69,3), (70,3), (71,3), (72,3), (73,3), (74,3), (75,3), (76,3), (77,3), (78,3), (79,3), (80,3), (81,3), (82,3), (83,3), (84,3), (85,3), (86,3), (87,3), (88,3), (89,3), (90,3), (91,3), (92,3), (93,3), (94,3), (95,3), (96,3), (97,3), (98,3), (99,3)))
+        lane1.add_lane((0,0), (0,1), (0,2), (0,3), (0,4), (1,4), (2,4), (3,4), (4,4), (5,4), (6,4), (7,4), (8,4), (9,4), (10,4), (11,4), (12,4), (13,4), (14,4), (15,4), (16,4), (17,4), (18,4), (19,4), (20,4), (21,4), (22,4), (23,4), (24,4), (25,4), (26,4), (27,4), (28,4), (29,4), (30,4), (31,4), (32,4), (33,4), (34,4), (35,4), (36,4), (37,4), (38,4), (39,4), (40,4), (41,4), (42,4), (43,4), (44,4), (45,4), (46,4), (47,4), (48,4), (49,4), (50,4), (51,4), (52,4), (53,4), (54,4), (55,4), (56,4), (57,4), (58,4), (59,4), (60,4), (61,4), (62,4), (63,4), (64,4), (65,4), (66,4), (67,4), (68,4), (69,4), (70,4), (71,4), (72,4), (73,4), (74,4), (75,4), (76,4), (77,4), (78,4), (79,4), (80,4), (81,4), (82,4), (83,4), (84,4), (85,4), (86,4), (87,4), (88,4), (89,4), (90,4), (91,4), (92,4), (93,4), (94,4), (95,4), (96,4), (97,4), (98,4), (99,4))
+        lane2.add_lane((99, 3), (98, 3), (97, 3), (96, 3), (95, 3), (94, 3), (93, 3), (92, 3), (91, 3), (90, 3), (89, 3), (88, 3), (87, 3), (86, 3), (85, 3), (84, 3), (83, 3), (82, 3), (81, 3), (80, 3), (79, 3), (78, 3), (77, 3), (76, 3), (75, 3), (74, 3), (73, 3), (72, 3), (71, 3), (70, 3), (69, 3), (68, 3), (67, 3), (66, 3), (65, 3), (64, 3), (63, 3), (62, 3), (61, 3), (60, 3), (59, 3), (58, 3), (57, 3), (56, 3), (55, 3), (54, 3), (53, 3), (52, 3), (51, 3), (50, 3), (49, 3), (48, 3), (47, 3), (46, 3), (45, 3), (44, 3), (43, 3), (42, 3), (41, 3), (40, 3), (39, 3), (38, 3), (37, 3), (36, 3), (35, 3), (34, 3), (33, 3), (32, 3), (31, 3), (30, 3), (29, 3), (28, 3), (27, 3), (26, 3), (25, 3), (24, 3), (23, 3), (22, 3), (21, 3), (20, 3), (19, 3), (18, 3), (17, 3), (16, 3), (15, 3), (14, 3), (13, 3), (12, 3), (11, 3), (10, 3), (9, 3), (8, 3), (7, 3), (6, 3), (5, 3), (4, 3), (3, 3), (2, 3), (1, 3), (1, 2), (1, 1), (1, 0))
 
         road_2.add_lane(lane3)
         road_2.add_lane(lane4)
 
         # other positions
-        lane3.add_lane(((0,0), (1,0), (2,0), (3,0), (4,0), (5,0), (6,0), (6,1), (6,2), (6,3), (6,4), (6,5), (6,6), (6,7), (6,8), (6,9), (6,10), (6,11), (6,12), (6,13), (6,14), (6,15), (6,16), (6,17), (6,18), (6,19), (6,20), (6,21), (6,22), (6,23), (6,24), (6,25), (6,26), (6,27), (6,28), (6,29), (6,30), (6,31), (6,32), (6,33), (6,34), (6,35), (6,36), (6,37), (6,38), (6,39), (6,40), (6,41), (6,42), (6,43), (6,44), (6,45), (6,46), (6,47), (6,48), (6,49), (6,50), (6,51), (6,52), (6,53), (6,54), (6,55), (6,56), (6,57), (6,58), (6,59), (6,60), (6,61), (6,62), (6,63), (6,64), (6,65), (6,66), (6,67), (6,68), (6,69), (6,70), (6,71), (6,72), (6,73), (6,74), (6,75), (6,76), (6,77), (6,78), (6,79), (6,80), (6,81), (6,82), (6,83), (6,84), (6,85), (6,86), (6,87), (6,88), (6,89), (6,90), (6,91), (6,92), (6,93), (6,94), (6,95), (6,96), (6,97), (6,98), (6,99)))
-        lane4.add_lane(((0,1), (1,1), (2,1), (3,1), (4,1), (5,1), (5,2), (5,3), (5,4), (5,5), (5,6), (5,7), (5,8), (5,9), (5,10), (5,11), (5,12), (5,13), (5,14), (5,15), (5,16), (5,17), (5,18), (5,19), (5,20), (5,21), (5,22), (5,23), (5,24), (5,25), (5,26), (5,27), (5,28), (5,29), (5,30), (5,31), (5,32), (5,33), (5,34), (5,35), (5,36), (5,37), (5,38), (5,39), (5,40), (5,41), (5,42), (5,43), (5,44), (5,45), (5,46), (5,47), (5,48), (5,49), (5,50), (5,51), (5,52), (5,53), (5,54), (5,55), (5,56), (5,57), (5,58), (5,59), (5,60), (5,61), (5,62), (5,63), (5,64), (5,65), (5,66), (5,67), (5,68), (5,69), (5,70), (5,71), (5,72), (5,73), (5,74), (5,75), (5,76), (5,77), (5,78), (5,79), (5,80), (5,81), (5,82), (5,83), (5,84), (5,85), (5,86), (5,87), (5,88), (5,89), (5,90), (5,91), (5,92), (5,93), (5,94), (5,95), (5,96), (5,97), (5,98), (5,99)))
+        lane4.add_lane((0,1), (1,1), (2,1), (3,1), (4,1), (5,1), (5,2), (5,3), (5,4), (5,5), (5,6), (5,7), (5,8), (5,9), (5,10), (5,11), (5,12), (5,13), (5,14), (5,15), (5,16), (5,17), (5,18), (5,19), (5,20), (5,21), (5,22), (5,23), (5,24), (5,25), (5,26), (5,27), (5,28), (5,29), (5,30), (5,31), (5,32), (5,33), (5,34), (5,35), (5,36), (5,37), (5,38), (5,39), (5,40), (5,41), (5,42), (5,43), (5,44), (5,45), (5,46), (5,47), (5,48), (5,49), (5,50), (5,51), (5,52), (5,53), (5,54), (5,55), (5,56), (5,57), (5,58), (5,59), (5,60), (5,61), (5,62), (5,63), (5,64), (5,65), (5,66), (5,67), (5,68), (5,69), (5,70), (5,71), (5,72), (5,73), (5,74), (5,75), (5,76), (5,77), (5,78), (5,79), (5,80), (5,81), (5,82), (5,83), (5,84), (5,85), (5,86), (5,87), (5,88), (5,89), (5,90), (5,91), (5,92), (5,93), (5,94), (5,95), (5,96), (5,97), (5,98), (5,99))
+        lane3.add_lane((6, 99), (6, 98), (6, 97), (6, 96), (6, 95), (6, 94), (6, 93), (6, 92), (6, 91), (6, 90), (6, 89), (6, 88), (6, 87), (6, 86), (6, 85), (6, 84), (6, 83), (6, 82), (6, 81), (6, 80), (6, 79), (6, 78), (6, 77), (6, 76), (6, 75), (6, 74), (6, 73), (6, 72), (6, 71), (6, 70), (6, 69), (6, 68), (6, 67), (6, 66), (6, 65), (6, 64), (6, 63), (6, 62), (6, 61), (6, 60), (6, 59), (6, 58), (6, 57), (6, 56), (6, 55), (6, 54), (6, 53), (6, 52), (6, 51), (6, 50), (6, 49), (6, 48), (6, 47), (6, 46), (6, 45), (6, 44), (6, 43), (6, 42), (6, 41), (6, 40), (6, 39), (6, 38), (6, 37), (6, 36), (6, 35), (6, 34), (6, 33), (6, 32), (6, 31), (6, 30), (6, 29), (6, 28), (6, 27), (6, 26), (6, 25), (6, 24), (6, 23), (6, 22), (6, 21), (6, 20), (6, 19), (6, 18), (6, 17), (6, 16), (6, 15), (6, 14), (6, 13), (6, 12), (6, 11), (6, 10), (6, 9), (6, 8), (6, 7), (6, 6), (6, 5), (6, 4), (6, 3), (6, 2), (6, 1), (6, 0), (5, 0), (4, 0), (3, 0), (2, 0), (1, 0), (0, 0))
+
 
 
         
@@ -390,9 +484,10 @@ class Environment:
 
         self.traffic_lights = [trafficLight1, trafficLight2, trafficLight3, trafficLight4]
 
-        self.car2 = Car(2, 6, 11)
+        self.car2 = Car(2, 2, 1)
         #car1 = Car(1, 0, 0)
 
+        self.map=Map()
 
         
     def add_road(self, road):
@@ -422,8 +517,7 @@ if __name__ == "__main__":
     env.display()
 
     async def main():
-        map_instance = Map()
-        simulation_task = asyncio.create_task(map_instance.draw_map())
+        simulation_task = asyncio.create_task(env.map.draw_map())
         intersection_task = asyncio.create_task(env.intersections[0].run())
         car_task = asyncio.create_task(env.car2.run())
 
