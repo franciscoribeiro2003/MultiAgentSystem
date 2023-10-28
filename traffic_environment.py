@@ -485,7 +485,10 @@ class Environment:
         self.traffic_lights = [trafficLight1, trafficLight2, trafficLight3, trafficLight4]
 
         self.car2 = Car(2, 2, 1)
-        #car1 = Car(1, 0, 0)
+        self.car3= Car(3, 5, 4)
+        self.car1 = Car(1, 0, 0)
+
+        self.cars = [self.car1, self.car2, self.car3]
 
         self.map=Map()
 
@@ -519,8 +522,11 @@ if __name__ == "__main__":
     async def main():
         simulation_task = asyncio.create_task(env.map.draw_map())
         intersection_task = asyncio.create_task(env.intersections[0].run())
-        car_task = asyncio.create_task(env.car2.run())
+        car_task2 = asyncio.create_task(env.car2.run())
+        car_task3 = asyncio.create_task(env.car3.run())
+        car_task1 = asyncio.create_task(env.car1.run())
 
-        await asyncio.gather(intersection_task, simulation_task, car_task)
+
+        await asyncio.gather(intersection_task, simulation_task, car_task1, car_task2, car_task3)
 
     asyncio.run(main())
