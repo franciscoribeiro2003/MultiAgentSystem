@@ -11,10 +11,12 @@ import pygame
 # Seed the random number generator with the current system time
 random.seed(time.time())
 
-traffic_lights_grid = [[None for _ in range(100)] for _ in range(100)]
-vehicles_grid = [[None for _ in range(100)] for _ in range(100)]
-lanes_grid = [[None for _ in range(100)] for _ in range(100)]
-intersections_grid = [[None for _ in range(100)] for _ in range(100)]
+SIZE=30
+
+traffic_lights_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
+vehicles_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
+lanes_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
+intersections_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
 
 class Map:
     def __init__(self):
@@ -78,7 +80,7 @@ class Map:
         intersection_color = (105, 105, 105)  # Dark Gray
         null_color = (0, 0, 0)  # Black
         car_pink = (255, 192, 203)  # Pink
-        greenback = (0, 200, 100)  # Green background
+        greenback = (0, 200, SIZE)  # Green background
 
         traffic_light_colors = {
             'Green': (0, 255, 0),
@@ -98,9 +100,9 @@ class Map:
             screen.fill(greenback)  # Green background
 
             # Draw grid
-            cell_size = screen_width // 100  # Assuming 100x100 grid
-            for x in range(100):
-                for y in range(100):
+            cell_size = screen_width // SIZE  # Assuming SIZExSIZE grid
+            for x in range(SIZE):
+                for y in range(SIZE):
                     if lanes_grid[x][y] is not None:
                         pygame.draw.rect(screen, lane_color, (x * cell_size, y * cell_size, cell_size, cell_size))
 
@@ -118,7 +120,7 @@ class Map:
 
                     
                     if (vehicles_grid[x][y] is not None and vehicles_grid[x][y] != 0) :
-                        print(f"painting over------{x, y}, {vehicles_grid[x][y]}")
+                        #print(f"painting over------{x, y}, {vehicles_grid[x][y]}")
                         pygame.draw.rect(screen, car_pink, (x * cell_size, y * cell_size, cell_size, cell_size))
                         xs.append(x)
                         ys.append(y)
@@ -212,7 +214,7 @@ class Intersection:
         self.x = x
         self.y = y
         self.map=Map()
-        self.map.update_intersections(x, y, name)
+        self.addcoord()
 
     # traffic lights
     def add_tlight(self, tlight):
@@ -220,6 +222,10 @@ class Intersection:
     
     # Logic of the lights btween the two roads and traffic lights
     # if the road is the same btween the traffic lights, then the traffics lights will be at the same color
+
+    def addcoord(self):
+        for i in range(len(self.x)):
+            self.map.update_intersections(self.x[i], self.y[i], self.name)
 
     def change(self, color1, color2):
         if color1 == 'Green':
@@ -278,7 +284,7 @@ class Car:
         self.x = int(x)
         self.y = int(y)
         self.map.update_vehicles(self.x, self.y, self.car_id)
-        print(f"Car is in {self.x, self.y}, and the map is {vehicles_grid[self.x][self.y]}, so the car is {self.car_id}")
+        #print(f"Car is in {self.x, self.y}, and the map is {vehicles_grid[self.x][self.y]}, so the car is {self.car_id}")
 
     def travel(self):
         whatsnextlanes = self.map.WhatsNextLane(self.x, self.y)
@@ -329,12 +335,12 @@ class Car:
                 return True
         elif vector == (0,-1):
             # going down (up visually)
-            if (newxplus>99): return False
+            if (newxplus>=SIZE): return False
             if self.map.IsThereCar(nextmove[0]+1, nextmove[1]) is not False:
                 return True
         elif vector == (1,0):
             # going right
-            if (newyplus>99): return False
+            if (newyplus>=SIZE): return False
             if self.map.IsThereCar(nextmove[0], nextmove[1]+1) is not False:
                 return True
         elif vector == (-1,0):
@@ -357,7 +363,7 @@ class Car:
                             pastx=self.x
                             pasty=self.y
                             self.move(nextmove[0], nextmove[1])
-                            print(f"___________presente {self.x, self.y}_____________")
+                            #print(f"___________presente {self.x, self.y}_____________")
                             self.map.update_vehicles(pastx, pasty, 0)
                         else:
                             print(f"Car {self.car_id} is waiting for the car(s) passing by")
@@ -444,45 +450,65 @@ class Environment:
         lane3 = Lane(3)
         lane4 = Lane(4)
 
+
+        #lane1.add_lane((0,0), (0,1), (0,2), (0,3), (0,4), (1,4), (2,4), (3,4), (4,4), (5,4), (6,4), (7,4), (8,4), (9,4), (10,4), (11,4), (12,4), (13,4), (14,4), (15,4), (16,4), (17,4), (18,4), (19,4), (20,4), (21,4), (22,4), (23,4), (24,4), (25,4), (26,4), (27,4), (28,4), (29,4), (30,4), (31,4), (32,4), (33,4), (34,4), (35,4), (36,4), (37,4), (38,4), (39,4), (40,4), (41,4), (42,4), (43,4), (44,4), (45,4), (46,4), (47,4), (48,4), (49,4), (50,4), (51,4), (52,4), (53,4), (54,4), (55,4), (56,4), (57,4), (58,4), (59,4), (60,4), (61,4), (62,4), (63,4), (64,4), (65,4), (66,4), (67,4), (68,4), (69,4), (70,4), (71,4), (72,4), (73,4), (74,4), (75,4), (76,4), (77,4), (78,4), (79,4), (80,4), (81,4), (82,4), (83,4), (84,4), (85,4), (86,4), (87,4), (88,4), (89,4), (90,4), (91,4), (92,4), (93,4), (94,4), (95,4), (96,4), (97,4), (98,4), (99,4))
+        #lane2.add_lane((99, 3), (98, 3), (97, 3), (96, 3), (95, 3), (94, 3), (93, 3), (92, 3), (91, 3), (90, 3), (89, 3), (88, 3), (87, 3), (86, 3), (85, 3), (84, 3), (83, 3), (82, 3), (81, 3), (80, 3), (79, 3), (78, 3), (77, 3), (76, 3), (75, 3), (74, 3), (73, 3), (72, 3), (71, 3), (70, 3), (69, 3), (68, 3), (67, 3), (66, 3), (65, 3), (64, 3), (63, 3), (62, 3), (61, 3), (60, 3), (59, 3), (58, 3), (57, 3), (56, 3), (55, 3), (54, 3), (53, 3), (52, 3), (51, 3), (50, 3), (49, 3), (48, 3), (47, 3), (46, 3), (45, 3), (44, 3), (43, 3), (42, 3), (41, 3), (40, 3), (39, 3), (38, 3), (37, 3), (36, 3), (35, 3), (34, 3), (33, 3), (32, 3), (31, 3), (30, 3), (29, 3), (28, 3), (27, 3), (26, 3), (25, 3), (24, 3), (23, 3), (22, 3), (21, 3), (20, 3), (19, 3), (18, 3), (17, 3), (16, 3), (15, 3), (14, 3), (13, 3), (12, 3), (11, 3), (10, 3), (9, 3), (8, 3), (7, 3), (6, 3), (5, 3), (4, 3), (3, 3), (2, 3), (1, 3), (1, 2), (1, 1), (1, 0))
+
+
+        # other positions
+        #lane4.add_lane((3,1), (4,1), (5,1), (5,2), (5,3), (5,4), (5,5), (5,6), (5,7), (5,8), (5,9), (5,10), (5,11), (5,12), (5,13), (5,14), (5,15), (5,16), (5,17), (5,18), (5,19), (5,20), (5,21), (5,22), (5,23), (5,24), (5,25), (5,26), (5,27), (5,28), (5,29), (5,30), (5,31), (5,32), (5,33), (5,34), (5,35), (5,36), (5,37), (5,38), (5,39), (5,40), (5,41), (5,42), (5,43), (5,44), (5,45), (5,46), (5,47), (5,48), (5,49), (5,50), (5,51), (5,52), (5,53), (5,54), (5,55), (5,56), (5,57), (5,58), (5,59), (5,60), (5,61), (5,62), (5,63), (5,64), (5,65), (5,66), (5,67), (5,68), (5,69), (5,70), (5,71), (5,72), (5,73), (5,74), (5,75), (5,76), (5,77), (5,78), (5,79), (5,80), (5,81), (5,82), (5,83), (5,84), (5,85), (5,86), (5,87), (5,88), (5,89), (5,90), (5,91), (5,92), (5,93), (5,94), (5,95), (5,96), (5,97), (5,98), (6,98))
+        #lane3.add_lane((6, 98), (6, 97), (6, 96), (6, 95), (6, 94), (6, 93), (6, 92), (6, 91), (6, 90), (6, 89), (6, 88), (6, 87), (6, 86), (6, 85), (6, 84), (6, 83), (6, 82), (6, 81), (6, 80), (6, 79), (6, 78), (6, 77), (6, 76), (6, 75), (6, 74), (6, 73), (6, 72), (6, 71), (6, 70), (6, 69), (6, 68), (6, 67), (6, 66), (6, 65), (6, 64), (6, 63), (6, 62), (6, 61), (6, 60), (6, 59), (6, 58), (6, 57), (6, 56), (6, 55), (6, 54), (6, 53), (6, 52), (6, 51), (6, 50), (6, 49), (6, 48), (6, 47), (6, 46), (6, 45), (6, 44), (6, 43), (6, 42), (6, 41), (6, 40), (6, 39), (6, 38), (6, 37), (6, 36), (6, 35), (6, 34), (6, 33), (6, 32), (6, 31), (6, 30), (6, 29), (6, 28), (6, 27), (6, 26), (6, 25), (6, 24), (6, 23), (6, 22), (6, 21), (6, 20), (6, 19), (6, 18), (6, 17), (6, 16), (6, 15), (6, 14), (6, 13), (6, 12), (6, 11), (6, 10), (6, 9), (6, 8), (6, 7), (6, 6), (6, 5), (6, 4), (6, 3), (6, 2), (6, 1), (6, 0), (5, 0), (4, 0), (3, 0), (3, 1))
+
+
+        lane5 = Lane(5)
+        lane6 = Lane(6)
+
+        lane1.add_lane((1,1), (2,1), (3,1), (4,1), (5,1), (5,2), (5,3), (5,4),(5,5), (5,6), (4,6), (3,6), (2,6), (1,6), (1,5), (1,4), (1,3), (1,2), (1,1))
+        lane2.add_lane((0,1), (0,2), (0,3), (0,4), (0,5), (0,6), (0,7), (1,7), (2,7), (3,7), (4,7), (5,7), (6,7), (6,6), (6,5), (6,4), (6,3), (6,2), (6,1), (6,0), (5,0), (4,0), (3,0), (2,0), (1,0), (0,0), (0,1))
+
+        lane3.add_lane((13,7), (13,6), (12,6), (11,6), (10,6), (9,6), (8,6), (7,6), (6,6), (5,6), (5,7))
+        lane4.add_lane((5,6), (5,7), (6,7), (7,7), (8,7), (9,7),(10,7), (11,7), (12,7), (13,7))
+
+        lane5.add_lane((12,7), (12,8), (12,9), (12, 10),(12,11), (12,12), (12, 13), (13,13), (14,13), (15,13), (16,13), (17,13), (17,12), (17, 11), (17, 10), (17, 9), (17, 8), (17, 7), (17,6), (17,5), (17,4), (17,3), (17,2), (17,1), (17,0), (16,0), (15,0), (14,0), (13,0), (12,0), (12,1), (12,2), (12,3), (12,4), (12,5), (12,6), (12,7))
+        lane6.add_lane((13,7), (13,6), (13,5), (13,4), (13,3), (13,2), (13,1), (14,1), (15,1), (16,1), (16,2), (16,3), (16,4), (16,5), (16,6), (16,7), (16,8), (16,9), (16,10), (16,11), (16,12), (15,12), (14,12), (13,12), (13,11), (13,10), (13,9), (13,8), (13,7))
+
         # making a road with lanes
         road_1.add_lane(lane1)
         road_1.add_lane(lane2)
-
-        lane1.add_lane((0,0), (0,1), (0,2), (0,3), (0,4), (1,4), (2,4), (3,4), (4,4), (5,4), (6,4), (7,4), (8,4), (9,4), (10,4), (11,4), (12,4), (13,4), (14,4), (15,4), (16,4), (17,4), (18,4), (19,4), (20,4), (21,4), (22,4), (23,4), (24,4), (25,4), (26,4), (27,4), (28,4), (29,4), (30,4), (31,4), (32,4), (33,4), (34,4), (35,4), (36,4), (37,4), (38,4), (39,4), (40,4), (41,4), (42,4), (43,4), (44,4), (45,4), (46,4), (47,4), (48,4), (49,4), (50,4), (51,4), (52,4), (53,4), (54,4), (55,4), (56,4), (57,4), (58,4), (59,4), (60,4), (61,4), (62,4), (63,4), (64,4), (65,4), (66,4), (67,4), (68,4), (69,4), (70,4), (71,4), (72,4), (73,4), (74,4), (75,4), (76,4), (77,4), (78,4), (79,4), (80,4), (81,4), (82,4), (83,4), (84,4), (85,4), (86,4), (87,4), (88,4), (89,4), (90,4), (91,4), (92,4), (93,4), (94,4), (95,4), (96,4), (97,4), (98,4), (99,4))
-        lane2.add_lane((99, 3), (98, 3), (97, 3), (96, 3), (95, 3), (94, 3), (93, 3), (92, 3), (91, 3), (90, 3), (89, 3), (88, 3), (87, 3), (86, 3), (85, 3), (84, 3), (83, 3), (82, 3), (81, 3), (80, 3), (79, 3), (78, 3), (77, 3), (76, 3), (75, 3), (74, 3), (73, 3), (72, 3), (71, 3), (70, 3), (69, 3), (68, 3), (67, 3), (66, 3), (65, 3), (64, 3), (63, 3), (62, 3), (61, 3), (60, 3), (59, 3), (58, 3), (57, 3), (56, 3), (55, 3), (54, 3), (53, 3), (52, 3), (51, 3), (50, 3), (49, 3), (48, 3), (47, 3), (46, 3), (45, 3), (44, 3), (43, 3), (42, 3), (41, 3), (40, 3), (39, 3), (38, 3), (37, 3), (36, 3), (35, 3), (34, 3), (33, 3), (32, 3), (31, 3), (30, 3), (29, 3), (28, 3), (27, 3), (26, 3), (25, 3), (24, 3), (23, 3), (22, 3), (21, 3), (20, 3), (19, 3), (18, 3), (17, 3), (16, 3), (15, 3), (14, 3), (13, 3), (12, 3), (11, 3), (10, 3), (9, 3), (8, 3), (7, 3), (6, 3), (5, 3), (4, 3), (3, 3), (2, 3), (1, 3), (1, 2), (1, 1), (1, 0))
-
         road_2.add_lane(lane3)
         road_2.add_lane(lane4)
-
-        # other positions
-        lane4.add_lane((0,1), (1,1), (2,1), (3,1), (4,1), (5,1), (5,2), (5,3), (5,4), (5,5), (5,6), (5,7), (5,8), (5,9), (5,10), (5,11), (5,12), (5,13), (5,14), (5,15), (5,16), (5,17), (5,18), (5,19), (5,20), (5,21), (5,22), (5,23), (5,24), (5,25), (5,26), (5,27), (5,28), (5,29), (5,30), (5,31), (5,32), (5,33), (5,34), (5,35), (5,36), (5,37), (5,38), (5,39), (5,40), (5,41), (5,42), (5,43), (5,44), (5,45), (5,46), (5,47), (5,48), (5,49), (5,50), (5,51), (5,52), (5,53), (5,54), (5,55), (5,56), (5,57), (5,58), (5,59), (5,60), (5,61), (5,62), (5,63), (5,64), (5,65), (5,66), (5,67), (5,68), (5,69), (5,70), (5,71), (5,72), (5,73), (5,74), (5,75), (5,76), (5,77), (5,78), (5,79), (5,80), (5,81), (5,82), (5,83), (5,84), (5,85), (5,86), (5,87), (5,88), (5,89), (5,90), (5,91), (5,92), (5,93), (5,94), (5,95), (5,96), (5,97), (5,98), (5,99))
-        lane3.add_lane((6, 99), (6, 98), (6, 97), (6, 96), (6, 95), (6, 94), (6, 93), (6, 92), (6, 91), (6, 90), (6, 89), (6, 88), (6, 87), (6, 86), (6, 85), (6, 84), (6, 83), (6, 82), (6, 81), (6, 80), (6, 79), (6, 78), (6, 77), (6, 76), (6, 75), (6, 74), (6, 73), (6, 72), (6, 71), (6, 70), (6, 69), (6, 68), (6, 67), (6, 66), (6, 65), (6, 64), (6, 63), (6, 62), (6, 61), (6, 60), (6, 59), (6, 58), (6, 57), (6, 56), (6, 55), (6, 54), (6, 53), (6, 52), (6, 51), (6, 50), (6, 49), (6, 48), (6, 47), (6, 46), (6, 45), (6, 44), (6, 43), (6, 42), (6, 41), (6, 40), (6, 39), (6, 38), (6, 37), (6, 36), (6, 35), (6, 34), (6, 33), (6, 32), (6, 31), (6, 30), (6, 29), (6, 28), (6, 27), (6, 26), (6, 25), (6, 24), (6, 23), (6, 22), (6, 21), (6, 20), (6, 19), (6, 18), (6, 17), (6, 16), (6, 15), (6, 14), (6, 13), (6, 12), (6, 11), (6, 10), (6, 9), (6, 8), (6, 7), (6, 6), (6, 5), (6, 4), (6, 3), (6, 2), (6, 1), (6, 0), (5, 0), (4, 0), (3, 0), (2, 0), (1, 0), (0, 0))
-
-
-
+        road_3.add_lane(lane5)
+        road_3.add_lane(lane6)
         
-        intersection_1 = Intersection("Intersection_1", road_1, road_2, 0,0)
-        #intersection_2 = Intersection("Intersection_2", road_3, road_4)
+        intersection_1 = Intersection("Intersection_1", road_1, road_2, (5,5,6, 6), (6, 7, 6,7))
+        intersection_2 = Intersection("Intersection_2", road_2, road_3, (12,12,13,13), (6,7,6,7))
 
         # data structures to keep the data related to the environment
         self.roads = [road_1, road_2, road_3, road_4]
 
-        self.intersections = [intersection_1]
+        self.intersections = [intersection_1, intersection_2]
 
-        self.lanes = [lane1, lane2, lane3, lane4]
+        self.lanes = [lane1, lane2, lane3, lane4, lane5, lane6]
 
-        trafficLight1 = TrafficLight(1, intersection_1, 'Red', 'Intermitent', road_1, 4, 4)
-        trafficLight2 = TrafficLight(2, intersection_1, 'Red', 'Intermitent', road_1, 7, 3)
-        trafficLight3 = TrafficLight(3, intersection_1, 'Red', 'Intermitent', road_2, 6, 5)
-        trafficLight4 = TrafficLight(4, intersection_1, 'Red', 'Intermitent', road_2, 5, 2)
+        trafficLight1 = TrafficLight(1, intersection_1, 'Red', 'Intermitent', road_1, 4, 7)
+        trafficLight2 = TrafficLight(2, intersection_1, 'Red', 'Intermitent', road_1, 7, 6)
+        #trafficLight3 = TrafficLight(3, intersection_1, 'Red', 'Intermitent', road_2, 6, 8)
+        trafficLight4 = TrafficLight(4, intersection_1, 'Red', 'Intermitent', road_2, 5, 5)
+
+        trafficLight5 = TrafficLight(5, intersection_1, 'Red', 'Intermitent', road_2, 11, 7)
+        trafficLight6 = TrafficLight(6, intersection_1, 'Red', 'Intermitent', road_3, 13, 8)
+        trafficLight7 = TrafficLight(7, intersection_1, 'Red', 'Intermitent', road_3, 12, 5)
 
         intersection_1.add_tlight(trafficLight1)
         intersection_1.add_tlight(trafficLight2)
-        intersection_1.add_tlight(trafficLight3)
+        #intersection_1.add_tlight(trafficLight3)
         intersection_1.add_tlight(trafficLight4)
 
+        intersection_2.add_tlight(trafficLight5)
+        intersection_2.add_tlight(trafficLight6)
+        intersection_2.add_tlight(trafficLight7)
 
-        self.traffic_lights = [trafficLight1, trafficLight2, trafficLight3, trafficLight4]
+        self.traffic_lights = [trafficLight1, trafficLight2, trafficLight4, trafficLight5, trafficLight6, trafficLight7]
 
         self.car2 = Car(2, 2, 1)
         self.car3= Car(3, 5, 4)
@@ -521,12 +547,13 @@ if __name__ == "__main__":
 
     async def main():
         simulation_task = asyncio.create_task(env.map.draw_map())
-        intersection_task = asyncio.create_task(env.intersections[0].run())
+        intersection_task1 = asyncio.create_task(env.intersections[0].run())
+        intersection_task2 = asyncio.create_task(env.intersections[1].run())
         car_task2 = asyncio.create_task(env.car2.run())
         car_task3 = asyncio.create_task(env.car3.run())
         car_task1 = asyncio.create_task(env.car1.run())
 
 
-        await asyncio.gather(intersection_task, simulation_task, car_task1, car_task2, car_task3)
+        await asyncio.gather(intersection_task1, intersection_task2, simulation_task, car_task1, car_task2, car_task3)
 
     asyncio.run(main())
