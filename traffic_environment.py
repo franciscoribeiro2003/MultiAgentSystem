@@ -1,8 +1,8 @@
+from os import wait
 import random
 import time
 from spade.agent import Agent
 from spade.behaviour import CyclicBehaviour
-from spade.template import Template
 from spade.message import Message
 import asyncio
 import spade
@@ -11,7 +11,7 @@ import pygame
 # Seed the random number generator with the current system time
 random.seed(time.time())
 
-SIZE=30
+SIZE = 30
 
 traffic_lights_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
 vehicles_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
@@ -127,22 +127,22 @@ class Map:
                     #await asyncio.sleep(0.01)
             for i in range(len(xs)):
                     if lanes_grid[xs[i]][ys[i]] is not None:
-                        pygame.draw.rect(screen, lane_color, (x * cell_size, y * cell_size, cell_size, cell_size))
+                        pygame.draw.rect(screen, lane_color, (xs[i] * cell_size, ys[i] * cell_size, cell_size, cell_size))
 
                     if intersections_grid[xs[i]][ys[i]] is not None:
-                        pygame.draw.rect(screen, intersection_color, (x * cell_size, y * cell_size, cell_size, cell_size))
+                        pygame.draw.rect(screen, intersection_color, (xs[i] * cell_size, ys[i] * cell_size, cell_size, cell_size))
 
                     if traffic_lights_grid[xs[i]][ys[i]] is not None:
-                        tl_id = (traffic_lights_grid[x][y])
+                        tl_id = (traffic_lights_grid[xs[i]][ys[i]])
                         color = 'Red' 
                         for tl in env.traffic_lights:
                             if tl.id == tl_id:
                                 color = tl.get_color()
                                 break
-                        pygame.draw.rect(screen, traffic_light_colors[color], (x * cell_size, y * cell_size, cell_size, cell_size))
-                    pygame.draw.rect(screen, greenback, (x * cell_size, y * cell_size, cell_size, cell_size))
-                    if (vehicles_grid[x][y] is not None and vehicles_grid[x][y] != 0) :
-                        pygame.draw.rect(screen, car_pink, (x * cell_size, y * cell_size, cell_size, cell_size))
+                        pygame.draw.rect(screen, traffic_light_colors[color], (xs[i] * cell_size, ys[i] * cell_size, cell_size, cell_size))
+                    pygame.draw.rect(screen, greenback, (xs[i] * cell_size, ys[i] * cell_size, cell_size, cell_size))
+                    if (vehicles_grid[xs[i]][ys[i]] is not None and vehicles_grid[xs[i]][ys[i]] != 0) :
+                        pygame.draw.rect(screen, car_pink, (xs[i] * cell_size, ys[i] * cell_size, cell_size, cell_size))
 
                     
             pygame.display.flip()
@@ -166,6 +166,9 @@ class TrafficLight:
         self.cordY = cordY
         self.map=Map()
         self.map.update_traffic_lights(cordX, cordY, id)
+        super().__init__()
+        
+
 
     def change(self, new_colorfront, new_colorleft):
         self.colorfront = new_colorfront
@@ -206,10 +209,12 @@ class TrafficLight:
 
 
 class Intersection:
-    def __init__(self, name, road1, road2, x, y):
+    def __init__(self, name, road1, road2, road3, road4, x, y):
         self.name = name
         self.road1 = road1
         self.road2 = road2
+        self.road3 = road3
+        self.road4 = road4
         self.tlights = []
         self.x = x
         self.y = y
@@ -243,11 +248,11 @@ class Intersection:
             color2left = 'Red'
             
         for i in range(len(self.tlights)):
-            if self.tlights[i].road==self.road1:
+            if self.tlights[i].road==self.road1 or self.tlights[i].road==self.road3:
                 self.tlights[i].change(color1, color1left)
                 print(f"Traffic Light Agent {self.tlights[i].id}: Front: {color1}; Left: {color1left}")
 
-            elif self.tlights[i].road==self.road2:
+            elif self.tlights[i].road==self.road2 or self.tlights[i].road==self.road4:
                 self.tlights[i].change(color2, color2left)
                 print(f"Traffic Light Agent {self.tlights[i].id}: Front: {color2}; Left: {color2left}")
 
@@ -270,122 +275,152 @@ class Intersection:
 
 
 
-
-class Car:
+class Car(Agent):
     def __init__(self, car_id, x, y):
+        Agent.__init__(self, car_id, "password")
+        #super().__init__(car_id, "password")
         self.car_id = car_id
         self.x = x
         self.y = y
         self.map=Map()
         self.map.update_vehicles(x, y, car_id)
 
-    def move(self, x, y):
-        print(f"Car {self.car_id} moved from ({self.x},{self.y}) to ({x},{y})")
-        self.x = int(x)
-        self.y = int(y)
-        self.map.update_vehicles(self.x, self.y, self.car_id)
-        #print(f"Car is in {self.x, self.y}, and the map is {vehicles_grid[self.x][self.y]}, so the car is {self.car_id}")
+    async def setup(self):
+        #print("Car Agent started")
+        #await self.start()        
+        class CarInteraction(CyclicBehaviour):
+            def __init__(self, agent, msg, map):
+                super().__init__()
+                self.agent = agent
+                self.msg = msg
+                self.map = map
+                self.car_id = agent.car_id
+                self.set_agent(agent)
 
-    def travel(self):
-        whatsnextlanes = self.map.WhatsNextLane(self.x, self.y)
-        if whatsnextlanes is not None:
-            nextmove = random.choice(whatsnextlanes)
-            return nextmove
-        return None
+            def move(self, x, y):
+                print(f"Car {self.car_id} moved from ({self.agent.x},{self.agent.y}) to ({x},{y})")
+                self.agent.x = int(x)
+                self.agent.y = int(y)
+                self.agent.map.update_vehicles(self.agent.x, self.agent.y, self.car_id)
+    
+            def travel(self):
+                whatsnextlanes = self.map.WhatsNextLane(self.agent.x, self.agent.y)
+                if whatsnextlanes is not None:
+                    nextmove = random.choice(whatsnextlanes)
+                    return nextmove
+                return None
 
-    def IsThereTrafficLight(self, nextmove):
-        if self.map.IsThereTrafficLight(nextmove[0], nextmove[1]) is not False:
-            # check if there is a traffic light in the next position
-            tl_id = self.map.IsThereTrafficLight(nextmove[0], nextmove[1])
-            for tl in env.traffic_lights:
-                if tl.id == tl_id:
-                    if tl.get_color() == 'Red':
-                        # if the traffic light is red, the car will wait
-                        tl.num_cars_waiting += 1
-                        while tl.get_color() == 'Red':
-                            return True
-                        tl.num_cars_waiting -= 1
-                        break
-                    elif tl.get_color() == 'Yellow':
-                        # if the traffic light is yellow, the car will wait
-                        tl.num_cars_waiting += 1
-                        while tl.get_color() == 'Yellow':
-                            return True
-                        tl.num_cars_waiting -= 1
-                        break
-                    else:
-                        # if the traffic light is green, the car will move
-                        return False
+            def IsThereTrafficLight(self, nextmove):
+                if self.map.IsThereTrafficLight(nextmove[0], nextmove[1]) is not False:
+                    # check if there is a traffic light in the next position
+                    tl_id = self.map.IsThereTrafficLight(nextmove[0], nextmove[1])
+                    for tl in env.traffic_lights:
+                        if tl.id == tl_id:
+                            if tl.get_color() == 'Red':
+                                # if the traffic light is red, the car will wait
+                                tl.num_cars_waiting += 1
+                                while tl.get_color() == 'Red':
+                                    return {'isThere': True, 'id': tl.id}
+                                tl.num_cars_waiting -= 1
+                                break
+                            elif tl.get_color() == 'Yellow':
+                                # if the traffic light is yellow, the car will wait
+                                tl.num_cars_waiting += 1
+                                while tl.get_color() == 'Yellow':
+                                    return {'isThere': True, 'id': tl.id}
+                                tl.num_cars_waiting -= 1
+                                break
+                            else:
+                                # if the traffic light is green, the car will move
+                                return {'isThere': False, 'id': tl.id}
+                            
 
+            def IsThereCarRight(self, nextmove):
+                # check if there is a car in the next position or at the right of the next position, so see the current position and the next to see what is going to be the right
+                # the right of the next position should have priority so return true if there is a car in the right of the next position
+                # to find the right of the next position, we need to see the current position and the next position, build a vector to find the direction of the movement, ot then see whats on the right
+                vector = (nextmove[0]-self.agent.x, nextmove[1]-self.agent.y)
+                newxplus= nextmove[0]+1
+                newyplus= nextmove[1]+1
+                newxminus= nextmove[0]-1
+                newyminus= nextmove[1]-1
 
-    def IsThereCarRight(self, nextmove):
-        # check if there is a car in the next position or at the right of the next position, so see the current position and the next to see what is going to be the right
-        # the right of the next position should have priority so return true if there is a car in the right of the next position
-        # to find the right of the next position, we need to see the current position and the next position, build a vector to find the direction of the movement, ot then see whats on the right
-        vector = (nextmove[0]-self.x, nextmove[1]-self.y)
-        newxplus= nextmove[0]+1
-        newyplus= nextmove[1]+1
-        newxminus= nextmove[0]-1
-        newyminus= nextmove[1]-1
-
-        if vector == (0,1):
-            # going up (down visually)
-            if (newxminus<0): return False
-            if self.map.IsThereCar(nextmove[0]-1, nextmove[1]) is not False:
-                return True
-        elif vector == (0,-1):
-            # going down (up visually)
-            if (newxplus>=SIZE): return False
-            if self.map.IsThereCar(nextmove[0]+1, nextmove[1]) is not False:
-                return True
-        elif vector == (1,0):
-            # going right
-            if (newyplus>=SIZE): return False
-            if self.map.IsThereCar(nextmove[0], nextmove[1]+1) is not False:
-                return True
-        elif vector == (-1,0):
-            # going left
-            if (newyminus<0): return False
-            if self.map.IsThereCar(nextmove[0], nextmove[1]-1) is not False:
-                return True        
-        if self.map.IsThereCar(nextmove[0], nextmove[1]) is not False:
-            return True
-        return False
-
-    speed = 2
-    async def run(self):
-        while True:
-            nextmove=self.travel()
-            if nextmove is not None:
-                if self.IsThereTrafficLight(nextmove) is not True:
-                    if self.map.IsThereCar(nextmove[0], nextmove[1]) is not True:
-                        if self.IsThereCarRight(nextmove) is not True:
-                            pastx=self.x
-                            pasty=self.y
-                            self.move(nextmove[0], nextmove[1])
-                            #print(f"___________presente {self.x, self.y}_____________")
-                            self.map.update_vehicles(pastx, pasty, 0)
-                        else:
-                            print(f"Car {self.car_id} is waiting for the car(s) passing by")
+                if vector == (0,1):
+                    # going up (down visually)
+                    if (newxminus<0): return False
+                    if self.map.IsThereCar(nextmove[0]-1, nextmove[1]) is not False:
+                        return True
+                elif vector == (0,-1):
+                    # going down (up visually)
+                    if (newxplus>=SIZE): return False
+                    if self.map.IsThereCar(nextmove[0]+1, nextmove[1]) is not False:
+                        return True
+                elif vector == (1,0):
+                    # going right
+                    if (newyplus>=SIZE): return False
+                    if self.map.IsThereCar(nextmove[0], nextmove[1]+1) is not False:
+                        return True
+                elif vector == (-1,0):
+                    # going left
+                    if (newyminus<0): return False
+                    if self.map.IsThereCar(nextmove[0], nextmove[1]-1) is not False:
+                        return True        
+                if self.map.IsThereCar(nextmove[0], nextmove[1]) is not False:
+                    return True
+                return False
+            async def run(self):
+                waiting_time=0
+                while True:
+                    nextmove=self.travel()
+                    if nextmove is not None:
+                        is_there_traffic_light = self.IsThereTrafficLight(nextmove)
+                        if is_there_traffic_light is not None and is_there_traffic_light['isThere'] is not True or is_there_traffic_light is None:
+                            if self.map.IsThereCar(nextmove[0], nextmove[1]) is not True:
+                                if self.IsThereCarRight(nextmove) is not True:
+                                    pastx=self.agent.x
+                                    pasty=self.agent.y
+                                    waiting_time=0
+                                    self.move(nextmove[0], nextmove[1])
+                                    #print(f"___________presente {self.x, self.y}_____________")
+                                    self.map.update_vehicles(pastx, pasty, 0)
+                                else:
+                                    print(f"Car {self.car_id} is waiting for the car(s) passing by")
+                                    await asyncio.sleep(1)
+                                    continue
+                            else:
+                                print(f"Car {self.car_id} is waiting for the car in front to move")
+                                await asyncio.sleep(1)
+                                continue
+                        elif is_there_traffic_light is not None and is_there_traffic_light['isThere'] is True:
+                            print(f"Car {self.car_id} is waiting for the traffic light to change")
+                            waiting_time+=1
+                            await self.reporting_waiting_time(waiting_time, is_there_traffic_light['id'])
                             await asyncio.sleep(1)
                             continue
                     else:
-                        print(f"Car {self.car_id} is waiting for the car in front to move")
+                        print("No road finded, car is waiting")
                         await asyncio.sleep(1)
                         continue
-                else:
-                    print(f"Car {self.car_id} is waiting for the traffic light to change")
                     await asyncio.sleep(1)
-                    continue
-            else:
-                print("No road finded, car is waiting")
-                await asyncio.sleep(1)
-                continue
-            await asyncio.sleep(1)
+                    
+            async def reporting_waiting_time(self, waiting_time, agentDestination):
+                msg = Message(to=agentDestination, sender=self.car_id)
+                msg.set_metadata("performative", "inform")
+                msg.body = str(waiting_time)
+                print(str(msg.sender) + " ->->->->->->->->-> " + str(msg.to) + "   Body: " + str(msg.body) +  " seconds")
+                # Check if the agent is properly initialized and connected to the message transport system
+                if self.car_id is not None:
+                    #await self.send(msg)
+                    print ("sent")
+                else:
+                    print("Error: agent is not properly initialized or connected to the message transport system")
+ 
 
+        self.add_behaviour(CarInteraction(self, None, self.map))
+        # call the async def run function
+        await self.behaviours[0].run()
 
-
-        
+            
 
 
 
@@ -480,8 +515,8 @@ class Environment:
         road_3.add_lane(lane5)
         road_3.add_lane(lane6)
         
-        intersection_1 = Intersection("Intersection_1", road_1, road_2, (5,5,6, 6), (6, 7, 6,7))
-        intersection_2 = Intersection("Intersection_2", road_2, road_3, (12,12,13,13), (6,7,6,7))
+        intersection_1 = Intersection("Intersection_1", road_1, road_2,None,None, (5,5,6, 6), (6, 7, 6,7))
+        intersection_2 = Intersection("Intersection_2", road_2, road_3,None,None, (12,12,13,13), (6,7,6,7))
 
         # data structures to keep the data related to the environment
         self.roads = [road_1, road_2, road_3, road_4]
@@ -490,14 +525,14 @@ class Environment:
 
         self.lanes = [lane1, lane2, lane3, lane4, lane5, lane6]
 
-        trafficLight1 = TrafficLight(1, intersection_1, 'Red', 'Intermitent', road_1, 4, 7)
-        trafficLight2 = TrafficLight(2, intersection_1, 'Red', 'Intermitent', road_1, 7, 6)
+        trafficLight1 = TrafficLight("TLAgent-1@localhost", intersection_1, 'Red', 'Intermitent', road_1, 4, 7)
+        trafficLight2 = TrafficLight("TLAgent-2@localhost", intersection_1, 'Red', 'Intermitent', road_1, 7, 6)
         #trafficLight3 = TrafficLight(3, intersection_1, 'Red', 'Intermitent', road_2, 6, 8)
-        trafficLight4 = TrafficLight(4, intersection_1, 'Red', 'Intermitent', road_2, 5, 5)
+        trafficLight4 = TrafficLight("TLAgent-4@localhost", intersection_1, 'Red', 'Intermitent', road_2, 5, 5)
 
-        trafficLight5 = TrafficLight(5, intersection_1, 'Red', 'Intermitent', road_2, 11, 7)
-        trafficLight6 = TrafficLight(6, intersection_1, 'Red', 'Intermitent', road_3, 13, 8)
-        trafficLight7 = TrafficLight(7, intersection_1, 'Red', 'Intermitent', road_3, 12, 5)
+        trafficLight5 = TrafficLight("TLAgent-5@localhost", intersection_1, 'Red', 'Intermitent', road_2, 11, 7)
+        trafficLight6 = TrafficLight("TLAgent-6@localhost", intersection_1, 'Red', 'Intermitent', road_3, 13, 8)
+        trafficLight7 = TrafficLight("TLAgent-7@localhost", intersection_1, 'Red', 'Intermitent', road_3, 12, 5)
 
         intersection_1.add_tlight(trafficLight1)
         intersection_1.add_tlight(trafficLight2)
@@ -510,9 +545,9 @@ class Environment:
 
         self.traffic_lights = [trafficLight1, trafficLight2, trafficLight4, trafficLight5, trafficLight6, trafficLight7]
 
-        self.car2 = Car(2, 2, 1)
-        self.car3= Car(3, 5, 4)
-        self.car1 = Car(1, 0, 0)
+        self.car2 = Car("Vehicle-2@localhost", 2, 1)
+        self.car3= Car("Vehicle-3@localhost", 5, 4)
+        self.car1 = Car("Vehicle-1@localhost", 0, 0)
 
         self.cars = [self.car1, self.car2, self.car3]
 
@@ -549,11 +584,17 @@ if __name__ == "__main__":
         simulation_task = asyncio.create_task(env.map.draw_map())
         intersection_task1 = asyncio.create_task(env.intersections[0].run())
         intersection_task2 = asyncio.create_task(env.intersections[1].run())
-        car_task2 = asyncio.create_task(env.car2.run())
-        car_task3 = asyncio.create_task(env.car3.run())
-        car_task1 = asyncio.create_task(env.car1.run())
+        #car_task2 = asyncio.create_task(env.car2.run())
+        #car_task3 = asyncio.create_task(env.car3.run())
+        #car_task1 = asyncio.create_task(env.car1.run())
 
+        #await env.car1.start()
+        #await env.car2.start()
+        #await env.car3.start()
+        
+        await asyncio.gather(*[ agent.setup() for agent in env.cars ],intersection_task1, intersection_task2, simulation_task)
 
-        await asyncio.gather(intersection_task1, intersection_task2, simulation_task, car_task1, car_task2, car_task3)
+        await spade.wait_until_finished(*[ agent for agent in env.cars ])
+        #await asyncio.gather(intersection_task1, intersection_task2, simulation_task)
 
-    asyncio.run(main())
+    spade.run(main())
