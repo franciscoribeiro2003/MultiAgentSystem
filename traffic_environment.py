@@ -409,11 +409,11 @@ class Car(Agent):
                 msg.body = str(waiting_time)
                 print(str(msg.sender) + " ->->->->->->->->-> " + str(msg.to) + "   Body: " + str(msg.body) +  " seconds")
                 # Check if the agent is properly initialized and connected to the message transport system
-                if self.car_id is not None:
-                    #await self.send(msg)
-                    print ("sent")
-                else:
-                    print("Error: agent is not properly initialized or connected to the message transport system")
+                await self.send(msg)
+                #print ("sent")
+                #if self.car_id is not None:
+                #else:
+                #    print("Error: agent is not properly initialized or connected to the message transport system")
  
 
         self.add_behaviour(CarInteraction(self, None, self.map))
@@ -589,10 +589,13 @@ if __name__ == "__main__":
         #car_task1 = asyncio.create_task(env.car1.run())
 
         #await env.car1.start()
+        #env.car1.start.web.start(hostname="localhost", port="10000")
         #await env.car2.start()
         #await env.car3.start()
         
-        await asyncio.gather(*[ agent.setup() for agent in env.cars ],intersection_task1, intersection_task2, simulation_task)
+
+
+        await asyncio.gather(*[ agent.start() for agent in env.cars ],intersection_task1, intersection_task2, simulation_task)
 
         await spade.wait_until_finished(*[ agent for agent in env.cars ])
         #await asyncio.gather(intersection_task1, intersection_task2, simulation_task)
