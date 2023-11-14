@@ -153,21 +153,53 @@ class Map:
 
     
     
-class TrafficLight:
+class TrafficLight(Agent):
     def __init__(self, id , intersection, colorfront, colorleft, road, cordX, cordY):
+        Agent.__init__(self, id, "password")
         self.id = id
         self.colorfront = colorfront
         self.colorleft = colorleft
         self.intersection = intersection
         self.num_cars_waiting = 0 # number of cars waiting at the traffic light
-        self.waiting_times = []  # List to store waiting times from vehicles
+        self.waitingTime=0 
         self.road = road
         self.cordX = cordX
         self.cordY = cordY
         self.map=Map()
         self.map.update_traffic_lights(cordX, cordY, id)
-        super().__init__()
+        self.waiting=False
         
+    async def setup(self):
+        class TrafficLight(CyclicBehaviour):
+            def __init__(self,agent, map):
+                super().__init__()
+                self.agent=agent
+                self.map=map
+                self.waitingTime=0
+
+            async def receiveMessage(self):
+                msg = await self.receive(timeout=1) # wait for a message for 10 seconds
+                if msg:
+                    print("Message received with content: {}".format(msg.body))
+                    self.waitingTime = int(msg.body)
+                    return self.waitingTime
+                else:
+                    print("Did not received any message after 10 seconds")
+
+            async def run(self):
+                while True:
+                    print(f"------------------ checking Traffic Light Agent {self.agent.id}-----------------------")
+                    await self.receiveMessage()
+                    print(f"------------------ checked Traffic Light Agent {self.agent.id}-----------------------")
+                    #self.agent.asking_to_change(self.waitingTime)
+                    print (f"Traffic Light Agent {self.agent.id} is mini checking")
+                    if (self.agent.get_color=='Green'): self.waitingTime=0
+                    await asyncio.sleep(1)
+
+        self.add_behaviour(TrafficLight(self, self.map))
+        await self.behaviours[0].run()
+
+
 
 
     def change(self, new_colorfront, new_colorleft):
@@ -175,24 +207,18 @@ class TrafficLight:
         self.colorleft = new_colorleft
 
 
-    # Store waiting time received from a vehicle
-    def receive_waiting_time(self, waiting_time):
-        self.waiting_times.append(waiting_time)
-        pass
-
     
-    def asking_to_change(self):
+    def asking_to_change(self, waiting_time):
         # Logic to handle asking to change from the vehicle agent
         # For example, adjust traffic light timings based on asking to change
 
         while self.colorfront == "Red":
-            total_waiting_time = sum(self.intersection.get_waiting_times())
-            if total_waiting_time > 60 or self.num_cars_waiting > 10:
+            if waiting_time > 3:
+                self.waiting=True
                 return True
+        self.waiting=False
         return False
         
-    def get_waiting_times(self):
-        return self.waiting_times
     
     def get_color(self):
         if self.colorfront == "Green":
@@ -201,11 +227,6 @@ class TrafficLight:
             return "Yellow"
         else:
             return 'Red'
-    
-    def run(self):
-        while True:
-            self.asking_to_change()
-            
 
 
 class Intersection:
@@ -256,8 +277,76 @@ class Intersection:
                 self.tlights[i].change(color2, color2left)
                 print(f"Traffic Light Agent {self.tlights[i].id}: Front: {color2}; Left: {color2left}")
 
+    def askedChange(self):
+        for i in range(len(self.tlights)):
+            if self.tlights[i].waiting==True:
+                return {'boolVal': True,'id': self.tlights[i].id}
+
+        
+
     async def run(self):
+        # see what road have red color
+        color2 = 'Red'
+        color1 = 'Green'
         while  True:
+
+            green_time = 0
+            while green_time < 10:  # Green for up to 10 seconds
+                askedChange=self.askedChange()
+                if askedChange is not None:
+                    change_requested=askedChange['boolVal']
+                    tlight_id =askedChange['id']
+                else:
+                    change_requested=False
+                    tlight_id=None
+                if change_requested:
+                    # If a change is requested, immediately change the traffic light to green
+                    ## find the road of the id
+                    road=None
+                    for i in range(len(self.tlights)):
+                        if self.tlights[i].id==tlight_id:
+                            road=self.tlights[i].road
+                            break
+                    if road==self.road1 or road==self.road3:
+                        self.change('Red', 'Yellow')
+                        await asyncio.sleep(3)
+                        self.change('Green', 'Red')
+                    elif road==self.road2 or road==self.road4:
+                        self.change('Yellow', 'Red')
+                        await asyncio.sleep(3)
+                        self.change('Red', 'Green')
+                        
+                    print(f"Traffic Light Agent {tlight_id} changed to Green due to request.")
+                    break
+                else:
+                    pass
+                    #self.change('Green', 'Red')
+                await asyncio.sleep(1)  # Sleep for 1 second
+                green_time += 1
+
+            for i in range(len(self.tlights)):
+                if self.tlights[i].get_color() == 'Red':
+                    if self.tlights[i].road==self.road1 or self.tlights[i].road==self.road3:
+                        color1 = 'Red'
+                    elif self.tlights[i].road==self.road2 or self.tlights[i].road==self.road4:
+                        color2 = 'Red'
+            
+
+            if color1 == 'Red':
+                self.change('Red', 'Yellow')
+                await asyncio.sleep(3)
+                color1 = 'Green'
+                color2 = 'Red'
+                self.change(color1, color2)
+            elif color2 == 'Red':
+                self.change('Yellow', 'Red')
+                await asyncio.sleep(3)
+                color1 = 'Red'
+                color2 = 'Green'
+                self.change(color1, color2)
+
+
+            """ 
             self.change('Green', 'Red')
             print ("-------------------------------------------------------")
             await asyncio.sleep(10)
@@ -270,7 +359,7 @@ class Intersection:
             self.change('Red', 'Yellow')
             print ("-------------------------------------------------------")
             await asyncio.sleep(3)
-            
+             """
 
 
 
@@ -525,14 +614,14 @@ class Environment:
 
         self.lanes = [lane1, lane2, lane3, lane4, lane5, lane6]
 
-        trafficLight1 = TrafficLight("TLAgent-1@localhost", intersection_1, 'Red', 'Intermitent', road_1, 4, 7)
-        trafficLight2 = TrafficLight("TLAgent-2@localhost", intersection_1, 'Red', 'Intermitent', road_1, 7, 6)
+        trafficLight1 = TrafficLight("TLAgent-1@localhost", intersection_1, 'Green', 'Intermitent', road_1, 4, 7)
+        trafficLight2 = TrafficLight("TLAgent-2@localhost", intersection_1, 'Green', 'Intermitent', road_1, 7, 6)
         #trafficLight3 = TrafficLight(3, intersection_1, 'Red', 'Intermitent', road_2, 6, 8)
         trafficLight4 = TrafficLight("TLAgent-4@localhost", intersection_1, 'Red', 'Intermitent', road_2, 5, 5)
 
         trafficLight5 = TrafficLight("TLAgent-5@localhost", intersection_1, 'Red', 'Intermitent', road_2, 11, 7)
-        trafficLight6 = TrafficLight("TLAgent-6@localhost", intersection_1, 'Red', 'Intermitent', road_3, 13, 8)
-        trafficLight7 = TrafficLight("TLAgent-7@localhost", intersection_1, 'Red', 'Intermitent', road_3, 12, 5)
+        trafficLight6 = TrafficLight("TLAgent-6@localhost", intersection_1, 'Green', 'Intermitent', road_3, 13, 8)
+        trafficLight7 = TrafficLight("TLAgent-7@localhost", intersection_1, 'Green', 'Intermitent', road_3, 12, 5)
 
         intersection_1.add_tlight(trafficLight1)
         intersection_1.add_tlight(trafficLight2)
@@ -595,7 +684,7 @@ if __name__ == "__main__":
         
 
 
-        await asyncio.gather(*[ agent.start() for agent in env.cars ],intersection_task1, intersection_task2, simulation_task)
+        await asyncio.gather(*[ agent.start() for agent in env.cars ],*[tlight.start() for tlight in env.traffic_lights],intersection_task1, intersection_task2, simulation_task)
 
         await spade.wait_until_finished(*[ agent for agent in env.cars ])
         #await asyncio.gather(intersection_task1, intersection_task2, simulation_task)
