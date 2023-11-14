@@ -170,35 +170,37 @@ class TrafficLight(Agent):
         self.waiting=False
         
     async def setup(self):
-        class TrafficLight(CyclicBehaviour):
-            def __init__(self,agent, map):
-                super().__init__()
-                self.agent=agent
-                self.map=map
-                self.waitingTime=0
-
-            async def receiveMessage(self):
-                msg = await self.receive(timeout=1) # wait for a message for 10 seconds
-                if msg:
-                    print("Message received with content: {}".format(msg.body))
-                    self.waitingTime = int(msg.body)
-                    return self.waitingTime
-                else:
-                    print("Did not received any message after 10 seconds")
-
-            async def run(self):
-                while True:
-                    print(f"------------------ checking Traffic Light Agent {self.agent.id}-----------------------")
-                    await self.receiveMessage()
-                    print(f"------------------ checked Traffic Light Agent {self.agent.id}-----------------------")
-                    #self.agent.asking_to_change(self.waitingTime)
-                    print (f"Traffic Light Agent {self.agent.id} is mini checking")
-                    if (self.agent.get_color=='Green'): self.waitingTime=0
-                    await asyncio.sleep(1)
-
-        self.add_behaviour(TrafficLight(self, self.map))
+        b = self.TrafficLight(self, self.map)
+        self.add_behaviour(b)
         await self.behaviours[0].run()
 
+    class TrafficLight(CyclicBehaviour):
+        def __init__(self,agent, map):
+            super().__init__()
+            self.agent=agent
+            self.map=map
+            self.waitingTime=0
+
+        async def receiveMessage(self):
+            msg = await self.receive(timeout=10) # wait for a message for 10 seconds
+            if msg:
+                print("Message received with content: {}".format(msg.body))
+                self.waitingTime = int(msg.body)
+                return self.waitingTime
+            else:
+                print("Did not received any message after 10 seconds")
+
+        async def run(self):
+            while True:
+                #print(f"------------------ checking Traffic Light Agent {self.agent.id}-----------------------")
+                await self.receiveMessage()
+                #print(f"------------------ checked Traffic Light Agent {self.agent.id}-----------------------")
+                self.agent.asking_to_change(self.waitingTime)
+                #print (f"Traffic Light Agent {self.agent.id} is mini checking")
+                if (self.agent.get_color=='Green'):
+                    self.waitingTime=0
+                    self.agent.waiting=False
+                await asyncio.sleep(1)
 
 
 
@@ -209,11 +211,13 @@ class TrafficLight(Agent):
 
     
     def asking_to_change(self, waiting_time):
+        #print ('heyuuyyyyy')
         # Logic to handle asking to change from the vehicle agent
         # For example, adjust traffic light timings based on asking to change
 
-        while self.colorfront == "Red":
-            if waiting_time > 3:
+        if self.colorfront == "Red":
+            #print ('11heyuuyyyyy')
+            if waiting_time >= 5:
                 self.waiting=True
                 return True
         self.waiting=False
@@ -280,6 +284,7 @@ class Intersection:
     def askedChange(self):
         for i in range(len(self.tlights)):
             if self.tlights[i].waiting==True:
+                self.tlights[i].waiting=False
                 return {'boolVal': True,'id': self.tlights[i].id}
 
         
@@ -291,9 +296,12 @@ class Intersection:
         while  True:
 
             green_time = 0
-            while green_time < 10:  # Green for up to 10 seconds
+            while green_time <= 10:  # Green for up to 10 seconds
+                askedChange=None
+                tlight_id=None
                 askedChange=self.askedChange()
                 if askedChange is not None:
+                    print(f"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa   {askedChange['id']}")
                     change_requested=askedChange['boolVal']
                     tlight_id =askedChange['id']
                 else:
@@ -310,27 +318,32 @@ class Intersection:
                     if road==self.road1 or road==self.road3:
                         self.change('Red', 'Yellow')
                         await asyncio.sleep(3)
-                        self.change('Green', 'Red')
+                        color1 = 'Green'
+                        color2 = 'Red'
+                        self.change(color1, color2)
+                        green_time=0
                     elif road==self.road2 or road==self.road4:
                         self.change('Yellow', 'Red')
                         await asyncio.sleep(3)
-                        self.change('Red', 'Green')
-                        
+                        color1 = 'Red'
+                        color2 = 'Green'
+                        self.change(color1, color2)
+                        green_time=0
                     print(f"Traffic Light Agent {tlight_id} changed to Green due to request.")
-                    break
+                    #break
                 else:
                     pass
                     #self.change('Green', 'Red')
                 await asyncio.sleep(1)  # Sleep for 1 second
                 green_time += 1
-
+            '''
             for i in range(len(self.tlights)):
                 if self.tlights[i].get_color() == 'Red':
                     if self.tlights[i].road==self.road1 or self.tlights[i].road==self.road3:
                         color1 = 'Red'
                     elif self.tlights[i].road==self.road2 or self.tlights[i].road==self.road4:
                         color2 = 'Red'
-            
+            '''
 
             if color1 == 'Red':
                 self.change('Red', 'Yellow')
@@ -344,22 +357,6 @@ class Intersection:
                 color1 = 'Red'
                 color2 = 'Green'
                 self.change(color1, color2)
-
-
-            """ 
-            self.change('Green', 'Red')
-            print ("-------------------------------------------------------")
-            await asyncio.sleep(10)
-            self.change('Yellow', 'Red')
-            print ("-------------------------------------------------------")
-            await asyncio.sleep(3)
-            self.change('Red', 'Green')
-            print ("-------------------------------------------------------")
-            await asyncio.sleep(10)
-            self.change('Red', 'Yellow')
-            print ("-------------------------------------------------------")
-            await asyncio.sleep(3)
-             """
 
 
 
