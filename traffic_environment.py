@@ -294,41 +294,52 @@ class Intersection:
         color2 = 'Red'
         color1 = 'Green'
         while  True:
-
+            tlight_cache=None
             green_time = 0
             while green_time <= 10:  # Green for up to 10 seconds
                 askedChange=None
+                change_requested=False
                 tlight_id=None
                 askedChange=self.askedChange()
                 if askedChange is not None:
-                    print(f"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa   {askedChange['id']}")
+                    #print(f"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa   {askedChange['id']}")
+                    
                     change_requested=askedChange['boolVal']
                     tlight_id =askedChange['id']
+
                 else:
                     change_requested=False
                     tlight_id=None
-                if change_requested:
+                    
+                if change_requested and tlight_id != tlight_cache:
+                    tlight_cache=None
                     # If a change is requested, immediately change the traffic light to green
                     ## find the road of the id
-                    road=None
+                    road=(None,0)
                     for i in range(len(self.tlights)):
                         if self.tlights[i].id==tlight_id:
                             road=self.tlights[i].road
-                            break
+
+                            #break
                     if road==self.road1 or road==self.road3:
                         self.change('Red', 'Yellow')
+                        #print(f"111111--------------- {tlight_id}  -----------------")
                         await asyncio.sleep(3)
                         color1 = 'Green'
                         color2 = 'Red'
                         self.change(color1, color2)
                         green_time=0
+                        tlight_cache=tlight_id
                     elif road==self.road2 or road==self.road4:
                         self.change('Yellow', 'Red')
+                        #print(f"2222222---------------{tlight_id}  -----------------")
                         await asyncio.sleep(3)
                         color1 = 'Red'
                         color2 = 'Green'
                         self.change(color1, color2)
                         green_time=0
+                        road=(None,0)
+                        tlight_cache=tlight_id
                     print(f"Traffic Light Agent {tlight_id} changed to Green due to request.")
                     #break
                 else:
@@ -336,14 +347,7 @@ class Intersection:
                     #self.change('Green', 'Red')
                 await asyncio.sleep(1)  # Sleep for 1 second
                 green_time += 1
-            '''
-            for i in range(len(self.tlights)):
-                if self.tlights[i].get_color() == 'Red':
-                    if self.tlights[i].road==self.road1 or self.tlights[i].road==self.road3:
-                        color1 = 'Red'
-                    elif self.tlights[i].road==self.road2 or self.tlights[i].road==self.road4:
-                        color2 = 'Red'
-            '''
+
 
             if color1 == 'Red':
                 self.change('Red', 'Yellow')
@@ -384,7 +388,7 @@ class Car(Agent):
                 self.set_agent(agent)
 
             def move(self, x, y):
-                print(f"Car {self.car_id} moved from ({self.agent.x},{self.agent.y}) to ({x},{y})")
+                #print(f"Car {self.car_id} moved from ({self.agent.x},{self.agent.y}) to ({x},{y})")
                 self.agent.x = int(x)
                 self.agent.y = int(y)
                 self.agent.map.update_vehicles(self.agent.x, self.agent.y, self.car_id)
@@ -470,15 +474,15 @@ class Car(Agent):
                                     #print(f"___________presente {self.x, self.y}_____________")
                                     self.map.update_vehicles(pastx, pasty, 0)
                                 else:
-                                    print(f"Car {self.car_id} is waiting for the car(s) passing by")
+                                    #print(f"Car {self.car_id} is waiting for the car(s) passing by")
                                     await asyncio.sleep(1)
                                     continue
                             else:
-                                print(f"Car {self.car_id} is waiting for the car in front to move")
+                                #print(f"Car {self.car_id} is waiting for the car in front to move")
                                 await asyncio.sleep(1)
                                 continue
                         elif is_there_traffic_light is not None and is_there_traffic_light['isThere'] is True:
-                            print(f"Car {self.car_id} is waiting for the traffic light to change")
+                            #print(f"Car {self.car_id} is waiting for the traffic light to change")
                             waiting_time+=1
                             await self.reporting_waiting_time(waiting_time, is_there_traffic_light['id'])
                             await asyncio.sleep(1)
@@ -493,7 +497,7 @@ class Car(Agent):
                 msg = Message(to=agentDestination, sender=self.car_id)
                 msg.set_metadata("performative", "inform")
                 msg.body = str(waiting_time)
-                print(str(msg.sender) + " ->->->->->->->->-> " + str(msg.to) + "   Body: " + str(msg.body) +  " seconds")
+                #print(str(msg.sender) + " ->->->->->->->->-> " + str(msg.to) + "   Body: " + str(msg.body) +  " seconds")
                 # Check if the agent is properly initialized and connected to the message transport system
                 await self.send(msg)
                 #print ("sent")
