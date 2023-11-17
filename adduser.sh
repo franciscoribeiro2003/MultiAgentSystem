@@ -4,25 +4,25 @@
 password="password"
 
 # Loop through usernames TLAgent-1 to TLAgent-7
-for i in {1..3}
+for i in {1..5}
 do
     username="Intersection_$i@localhost"
     echo "Adding user: $username"
-    
+
     # Use prosodyctl command to add the user and provide password
     echo -e "$password\n$password" | prosodyctl adduser "$username"
 done
 
-for i in {1..7}
+for i in {1..16}
 do
     username="TLAgent-$i@localhost"
     echo "Adding user: $username"
-    
+
     # Use prosodyctl command to add the user and provide password
     echo -e "$password\n$password" | prosodyctl adduser "$username"
 done
 
-for i in {1..3}
+for i in {1..20}
 do
     username="Vehicle-$i@localhost"
     echo "Adding user: $username"
@@ -32,4 +32,3 @@ do
 done
 
 echo "User creation completed."
-
