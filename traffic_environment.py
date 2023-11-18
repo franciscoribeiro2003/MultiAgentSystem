@@ -17,31 +17,44 @@ traffic_lights_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
 vehicles_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
 lanes_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
 intersections_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
+emergency_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
+
 
 
 class Map:
     def __init__(self):
-        pass
+        self.zoom_level = 1
+        self.offset_x = 0
+        self.offset_y = 0
+        self.zoom_level = 1.0
 
+    def zoom_in(self):
+        self.zoom_level *= 1.2
+
+    def zoom_out(self):
+        self.zoom_level /= 1.2
+
+    def pan(self, dx, dy):
+        self.offset_x += dx
+        self.offset_y += dy
 
     def update_traffic_lights(self, x, y, info):
         traffic_lights_grid[x][y] = info
 
-
     def update_vehicles(self, x, y, info):
         vehicles_grid[x][y] = info
 
-
     def update_lanes(self, x, y, info):
         if lanes_grid[x][y] is None:
-            lanes_grid[x][y] = [] 
-        
+            lanes_grid[x][y] = []
         lanes_grid[x][y].append(info)
-        
+
 
     def update_intersections(self, x, y, info):
         intersections_grid[x][y] = info
-    
+
+    def update_emergency(self, x, y, info):
+        emergency_grid[x][y] = info    
 
     def WhatsNextLane(self, x,y):
         # display the movements avaible for the car, so if it is in the intersection display the lanes that the car can go, if it is in the lane display the next lane
@@ -55,7 +68,7 @@ class Map:
             for i in range(len(env.lanes)):
                 for k in range(len(lanes_grid[x][y])):
                     if env.lanes[i].lane_id == lanes_grid[x][y][k]:
-                        lanes.append(env.lanes[i].next_position(x, y))                        
+                        lanes.append(env.lanes[i].next_position(x,y))
                         break
             return lanes
 
@@ -65,98 +78,118 @@ class Map:
         if traffic_lights_grid[x][y] is not None or traffic_lights_grid[x][y] != 0:
             return traffic_lights_grid[x][y]
         return False
-    
+
 
     def IsThereCar(self, x, y):
-        #print (f"Verificar          {x, y}, {vehicles_grid[x][y]}")
         # check if there is a car in the position
         if vehicles_grid[x][y] is None or vehicles_grid[x][y]  == 0:
-            #print ("checkk")
             return False
         return vehicles_grid[x][y]
 
 
+    def route_astar(self, from_x, from_y, to_x, to_y):
+        # make the route from the car to destination
+        route = []
+        pass
+        
+
     async def draw_map(self):
         pygame.init()
-        auto = pygame.display.Info().current_w, pygame.display.Info().current_h
-        screen_width, screen_height = 400,400
+        # auto = pygame.display.Info().current_w, pygame.display.Info().current_h
+        screen_width, screen_height = 500, 500
         screen = pygame.display.set_mode((screen_width, screen_height), pygame.RESIZABLE)
         pygame.display.set_caption('Traffic Simulation')
 
-        lane_color = (169, 169, 169)  # Gray
-        intersection_color = (105, 105, 105)  # Dark Gray
+        lane_color = (70, 70, 70)  # Gray
+        intersection_color = (50, 50, 50)  # Dark Gray
         null_color = (0, 0, 0)  # Black
-        car_pink = (255, 192, 203)  # Pink
-        greenback = (0, 200, SIZE)  # Green background
+        car = (255, 255, 255)  
+        greenback = (0, 200, 100)  # Green background
 
         traffic_light_colors = {
-            'Green': (0, 255, 0),
+            'Green': (60, 255, 60),
             'Yellow': (255, 255, 0),
             'Red': (255, 0, 0),
             'Intermitent': (255, 165, 0)  # Orange for Intermitent
         }
+
         running = True
+        dragging = False
+        prev_mouse_pos = None
+        last_click_time = 0
+        double_click_threshold = 500
 
         while running:
-            xs = []
-            ys = []
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_PLUS or event.key == pygame.K_KP_PLUS:
+                        env.zoom_in()
+                    elif event.key == pygame.K_MINUS or event.key == pygame.K_KP_MINUS:
+                        env.zoom_out()
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:  # Left mouse button
+                        if pygame.time.get_ticks() - last_click_time < double_click_threshold:
+                            env.zoom_in()  # Double click zoom in
+                        else:
+                            dragging = True
+                            prev_mouse_pos = pygame.mouse.get_pos()
+                        last_click_time = pygame.time.get_ticks()
+                    elif event.button == 4:  # Scroll wheel up
+                        env.zoom_out()
+                    elif event.button == 5:  # Scroll wheel down
+                        env.zoom_in()
+                elif event.type == pygame.MOUSEBUTTONUP:
+                    if event.button == 1:  # Left mouse button
+                        dragging = False
+                        prev_mouse_pos = None
 
-            screen.fill(greenback)  # Green background
+            if dragging:
+                new_mouse_pos = pygame.mouse.get_pos()
+                if prev_mouse_pos is not None:
+                    delta_x = prev_mouse_pos[0] - new_mouse_pos[0]  # Invert the direction
+                    delta_y = prev_mouse_pos[1] - new_mouse_pos[1]  # Invert the direction
+                    env.pan(delta_x, delta_y)
+                prev_mouse_pos = new_mouse_pos
 
-            # Draw grid
-            cell_size = screen_width // SIZE  # Assuming SIZExSIZE grid
+            screen.fill(greenback)
+
+
+            # Draw grid with zoom and offset
+            cell_size = int(screen_width // (SIZE * env.zoom_level))
             for x in range(SIZE):
                 for y in range(SIZE):
+                    draw_x = int((x * cell_size) - env.offset_x)
+                    draw_y = int((y * cell_size) - env.offset_y)
+
+
+
                     if lanes_grid[x][y] is not None:
-                        pygame.draw.rect(screen, lane_color, (x * cell_size, y * cell_size, cell_size, cell_size))
+                        pygame.draw.rect(screen, lane_color, (draw_x, draw_y, cell_size, cell_size))
 
                     if intersections_grid[x][y] is not None:
-                        pygame.draw.rect(screen, intersection_color, (x * cell_size, y * cell_size, cell_size, cell_size))
+                        pygame.draw.rect(screen, intersection_color, (draw_x, draw_y, cell_size, cell_size))
 
                     if traffic_lights_grid[x][y] is not None:
-                        tl_id = (traffic_lights_grid[x][y])
-                        color = 'Red' 
+                        tl_id = traffic_lights_grid[x][y]
+                        color = 'Red'
                         for tl in env.traffic_lights:
                             if tl.id == tl_id:
                                 color = tl.get_color()
                                 break
-                        pygame.draw.rect(screen, traffic_light_colors[color], (x * cell_size, y * cell_size, cell_size, cell_size))
+                        pygame.draw.rect(screen, traffic_light_colors[color], (draw_x, draw_y, cell_size, cell_size))
 
-                    
-                    if (vehicles_grid[x][y] is not None and vehicles_grid[x][y] != 0) :
-                        #print(f"painting over------{x, y}, {vehicles_grid[x][y]}")
-                        pygame.draw.rect(screen, car_pink, (x * cell_size, y * cell_size, cell_size, cell_size))
-                        xs.append(x)
-                        ys.append(y)
-                    #await asyncio.sleep(0.01)
-            for i in range(len(xs)):
-                    if lanes_grid[xs[i]][ys[i]] is not None:
-                        pygame.draw.rect(screen, lane_color, (xs[i] * cell_size, ys[i] * cell_size, cell_size, cell_size))
+                    if vehicles_grid[x][y] is not None and vehicles_grid[x][y] != 0:
+                        pygame.draw.ellipse(screen, car, (draw_x, draw_y, cell_size, cell_size))
 
-                    if intersections_grid[xs[i]][ys[i]] is not None:
-                        pygame.draw.rect(screen, intersection_color, (xs[i] * cell_size, ys[i] * cell_size, cell_size, cell_size))
-
-                    if traffic_lights_grid[xs[i]][ys[i]] is not None:
-                        tl_id = (traffic_lights_grid[xs[i]][ys[i]])
-                        color = 'Red' 
-                        for tl in env.traffic_lights:
-                            if tl.id == tl_id:
-                                color = tl.get_color()
-                                break
-                        pygame.draw.rect(screen, traffic_light_colors[color], (xs[i] * cell_size, ys[i] * cell_size, cell_size, cell_size))
-                    pygame.draw.rect(screen, greenback, (xs[i] * cell_size, ys[i] * cell_size, cell_size, cell_size))
-                    if (vehicles_grid[xs[i]][ys[i]] is not None and vehicles_grid[xs[i]][ys[i]] != 0) :
-                        pygame.draw.rect(screen, car_pink, (xs[i] * cell_size, ys[i] * cell_size, cell_size, cell_size))
-   
             pygame.display.flip()
             await asyncio.sleep(0.1)
 
         pygame.quit()
     
     
+
 class TrafficLight(Agent):
     def __init__(self, id, intersection, colorfront, colorleft, road, cordX, cordY):
         Agent.__init__(self, id, "password")
@@ -183,13 +216,12 @@ class TrafficLight(Agent):
 
 
         async def receiveMessage(self):
-            msg = await self.receive(timeout = 0.01) # wait for a message for 10 seconds
+            msg = await self.receive(timeout = 0.01) 
             if msg:
                 print(f"{self.agent.id} received the message with content: {msg.body} from {msg.sender}")
                 waiting_times = eval(msg.body)
                 return waiting_times
             else:
-                #print("Did not received any message after 10 seconds")
                 return None
 
 
@@ -199,8 +231,7 @@ class TrafficLight(Agent):
             msg.set_metadata("performative", "inform")
             msg.body = str(score)
 
-            # Send the message
-            #print(f"*********Sending score to {receiver} from {self.agent.id}**********")
+            #print(f"Sending score to {receiver} from {self.agent.id}")
             await self.send(msg)
 
 
@@ -248,6 +279,7 @@ class TrafficLight(Agent):
             return 'Red'
 
 
+
 class Intersection(Agent):
     def __init__(self, name, road1, road2, road3, road4, x, y):
         Agent.__init__(self, name, "password")
@@ -266,6 +298,7 @@ class Intersection(Agent):
 
     def add_tlight(self, tlight):
         self.tlights.append(tlight)
+
 
     def addcoord(self):
         for i in range(len(self.x)):
@@ -297,37 +330,38 @@ class Intersection(Agent):
                 print(f"Traffic Light Agent {self.tlights[i].id}: Front: {color2}; Left: {color2left}")
 
 
-        
     def askedChange(self):
         for i in range(len(self.tlights)):
             if self.tlights[i].waiting == True:
                 self.tlights[i].waiting = False
                 return {'boolVal': True,'id': self.tlights[i].id}
 
+
     def find_tlight(self, id):
         for i in range(len(self.tlights)):
             if str(self.tlights[i].id).lower() == str(id).lower():
                 return self.tlights[i]
 
+
     def find_tlight_by_score(self, score):
-        if score == 'tf1' and len(self.tlights) > 0:
-            tlight=self.find_tlight_by_road(self.road1)
+        if score == 'tf1' and len(self.tlights) > 0 and self.road1 is not None: 
+            tlight=self.find_tlight_by_road(self.road1.name)
             return tlight
-        elif score == 'tf2' and len(self.tlights) > 1:
-            tlight=self.find_tlight_by_road(self.road2)
+        elif score == 'tf2' and len(self.tlights) > 1 and self.road2 is not None:
+            tlight=self.find_tlight_by_road(self.road2.name)
             return tlight
-        elif score == 'tf3' and len(self.tlights) > 2:
-            tlight=self.find_tlight_by_road(self.road3)
+        elif score == 'tf3' and len(self.tlights) > 2 and self.road3 is not None:
+            tlight=self.find_tlight_by_road(self.road3.name)
             return tlight
-        elif score == 'tf4' and len(self.tlights) > 3:
-            tlight=self.find_tlight_by_road(self.road4)
+        elif score == 'tf4' and len(self.tlights) > 3 and self.road4 is not None:
+            tlight=self.find_tlight_by_road(self.road4.name)
             return tlight
         else:
             return None
 
     def find_tlight_by_road(self, road):
         for tl in self.tlights:
-            if tl.road == road:
+            if str(tl.road.name).lower() == str(road).lower():
                 return tl
 
     def tlight_with_more_points(self):
@@ -346,6 +380,7 @@ class Intersection(Agent):
             self.scores[score]['points'] = 0
             self.scores[score]['car_platoon'] = 0
 
+
     async def setup(self):
         b = self.Intersection(self)
         self.add_behaviour(b)
@@ -357,6 +392,7 @@ class Intersection(Agent):
             super().__init__()
             self.agent = agent
         
+
         async def change_by_tlight(self, tlight):
             if tlight is not None:
                 if tlight.road == self.agent.road1 or tlight.road == self.agent.road3:
@@ -389,69 +425,70 @@ class Intersection(Agent):
 
 
         async def receiveMessage(self):
-            msg = await self.receive(timeout=0.01)
-
+            msg = await self.receive(timeout = 0.01)
             if msg:
-                print(f"-- Intersection {self.agent.id} receive message from {msg.sender} with content: {msg.body} --")
+                print(f"{self.agent.id} receive message from {msg.sender} with content: {msg.body} --")
                 scores={'sender': msg.sender, 'body': eval(msg.body)}
                 await self.arrange_scores(scores)
-                #await self.receiveMessage()
             else:
                 pass
             
+
         async def arrange_scores(self, scores):
-            #print(f"checkkkk  {scores['sender']}    {scores['body']}")
-            #print (f"----sender {scores['sender']}")
-            tlight=self.agent.find_tlight(scores['sender'])
-            #print (f"----tlight {tlight.id}")
+            tlight = self.agent.find_tlight(scores['sender'])
             if tlight is not None:
-                print(f"checkkkk  {tlight.id}    {scores['body']}")
-                if tlight.road == self.agent.road1:
+                if str(tlight.road.name).lower() == str(self.agent.road1.name).lower():
                     self.agent.scores['tf1']['points'] += scores['body']['points']
                     self.agent.scores['tf1']['car_platoon'] = max(self.agent.scores['tf1']['car_platoon'],scores['body']['car_platoon'])
-                elif tlight.road == self.agent.road2:
+                elif str(tlight.road.name).lower() == str(self.agent.road2.name).lower():
                     self.agent.scores['tf2']['points'] += scores['body']['points']
                     self.agent.scores['tf2']['car_platoon'] = max(self.agent.scores['tf2']['car_platoon'],scores['body']['car_platoon'])
-                elif tlight.road == self.agent.road3:
+                elif str(tlight.road.name).lower() == str(self.agent.road3.name).lower():
                     self.agent.scores['tf3']['points'] += scores['body']['points']
                     self.agent.scores['tf3']['car_platoon'] = max(self.agent.scores['tf3']['car_platoon'],scores['body']['car_platoon'])
-                elif tlight.road == self.agent.road4:
+                elif str(tlight.road.name).lower() == str(self.agent.road4.name).lower():
                     self.agent.scores['tf4']['points'] += scores['body']['points']
                     self.agent.scores['tf4']['car_platoon'] = max(self.agent.scores['tf4']['car_platoon'],scores['body']['car_platoon'])
-            await self.print_scores()
+            #await self.print_scores()
                     
 
         async def print_scores(self):
             print("+---------------------------------------------+")
-            print("|Scores:                                      |")
+            print(f"| {self.agent.road1.name} | {self.agent.road2.name}              |")
+            print(f"| {self.agent.id} Scores:                  |")
             for road in self.agent.scores:
                 print(f"|Road {road}: {self.agent.scores[road]['points']} points                           |")
             print("+---------------------------------------------+")
 
+
         async def run(self):
+            time = 0 
             while True:
                 await self.receiveMessage()
-                time=1 
-                tlight_to_change=None
-                tlight_to_change=self.agent.tlight_with_more_points()
+                await self.receiveMessage()
+                if (time > 0):
+                    time -= 1
+                    self.agent.clear_scores()
+                    await asyncio.sleep(1)
+                    continue
+                tlight_to_change = None
+                tlight_to_change = self.agent.tlight_with_more_points()
                 if tlight_to_change is not None and tlight_to_change['tlight'] is not None:
-                    print(f"Changing traffic light {tlight_to_change['tlight'].id}")
-                    time=tlight_to_change['reaction_time']
-                    if (time>10): time=10
-                    tlight_to_change=tlight_to_change['tlight']
+                    time = tlight_to_change['reaction_time']
+                    if (time > 10):
+                        time = 10
+                    tlight_to_change = tlight_to_change['tlight']
                     await self.change_by_tlight(tlight_to_change)
                     self.agent.clear_scores()
+                    continue
                 else:
                     pass
-                
-                await asyncio.sleep(time)
-
+                await asyncio.sleep(1)
 
 
 class Car(Agent):
     def __init__(self, car_id, x, y):
         Agent.__init__(self, car_id, "password")
-        #super().__init__(car_id, "password")
         self.car_id = car_id
         self.x = x
         self.y = y
@@ -459,8 +496,6 @@ class Car(Agent):
         self.map.update_vehicles(x, y, car_id)
 
     async def setup(self):
-        #print("Car Agent started")
-        #await self.start()        
         class CarInteraction(CyclicBehaviour):
             def __init__(self, agent, msg, map):
                 super().__init__()
@@ -471,7 +506,6 @@ class Car(Agent):
                 self.set_agent(agent)
 
             def move(self, x, y):
-                #print(f"Car {self.car_id} moved from ({self.agent.x},{self.agent.y}) to ({x},{y})")
                 self.agent.x = int(x)
                 self.agent.y = int(y)
                 self.agent.map.update_vehicles(self.agent.x, self.agent.y, self.car_id)
@@ -574,18 +608,17 @@ class Car(Agent):
                             await asyncio.sleep(1)
                             continue
                     else:
-                        print(f"No road finded, car {self.agent.car_id} is waiting")
+                        #print(f"No road finded, car {self.agent.car_id} is waiting")
                         await asyncio.sleep(1)
                         continue
 
             async def receiveMessage(self):
-                msg = await self.receive(timeout = 0.01) # wait for a message for 10 seconds
+                msg = await self.receive(timeout = 0.01) 
                 if msg:
                     #print(f"{self.agent.car_id} received a message with content: {msg.body} from {msg.sender}")
                     mensagem = eval(msg.body)
                     return mensagem
                 else:
-                    #print(f"{self.agent.car_id} Did not received any message after 10 seconds")
                     return None
                 
             async def reporting_waiting_time(self, waiting_time, agentDestination):
@@ -600,17 +633,40 @@ class Car(Agent):
                 msg.set_metadata("performative", "inform")
                 msg.body = str(previous_cars)
                 #print(str(msg.sender) + " ->->->->->->->->-> " + str(msg.to) + "   Body: " + str(msg.body))
-                # Check if the agent is properly initialized and connected to the message transport system
                 await self.send(msg)
-                #print ("sent")
-                #if self.car_id is not None:
-                #else:
-                #    print("Error: agent is not properly initialized or connected to the message transport system")
  
 
         self.add_behaviour(CarInteraction(self, None, self.map))
-        # call the async def run function
         await self.behaviours[0].run()
+
+
+
+class EmergencyVehicle(Agent):
+    def __init__(self, id, x, y):
+        Agent.__init__(self, id, "password")
+        self.id = id
+        self.x = x
+        self.y = y
+        self.map = Map()
+
+    def move(self, x, y):
+        self.map.update_emergency(self.x, self.y, 0)
+        self.x = x
+        self.y = y
+        self.map.update_emergency(self.x, self.y, self.id)
+
+    async def setup(self):
+        pass
+
+    class EmergencyInteraction(CyclicBehaviour):
+        def __init__(self, agent):
+            super().__init__()
+            self.agent = agent
+
+
+        async def run(self):
+            pass
+
 
 
 class RoadSign:
@@ -656,38 +712,54 @@ class Road:
 
 class Environment:
     def __init__(self):
-        road_1 = Road("Road_1", 2)  # 2 lanes
-        road_2 = Road("Road_2", 2)  # 2 lanes
+        self.zoom_level = 1.0
+        self.offset_x = 0
+        self.offset_y = 0
+
+        road_1 = Road("Road_1", 2)
+        road_2 = Road("Road_2", 2)
         road_3 = Road("Road_3", 2)
         road_4 = Road("Road_4", 2)
+        road_5 = Road("Road_5", 2)
+        road_6 = Road("Road_6", 2)
+        road_7 = Road("Road_7", 2)
 
-        
+
         lane1 = Lane(1)
         lane2 = Lane(2)
         lane3 = Lane(3)
         lane4 = Lane(4)
-
-
-        #lane1.add_lane((0,0), (0,1), (0,2), (0,3), (0,4), (1,4), (2,4), (3,4), (4,4), (5,4), (6,4), (7,4), (8,4), (9,4), (10,4), (11,4), (12,4), (13,4), (14,4), (15,4), (16,4), (17,4), (18,4), (19,4), (20,4), (21,4), (22,4), (23,4), (24,4), (25,4), (26,4), (27,4), (28,4), (29,4), (30,4), (31,4), (32,4), (33,4), (34,4), (35,4), (36,4), (37,4), (38,4), (39,4), (40,4), (41,4), (42,4), (43,4), (44,4), (45,4), (46,4), (47,4), (48,4), (49,4), (50,4), (51,4), (52,4), (53,4), (54,4), (55,4), (56,4), (57,4), (58,4), (59,4), (60,4), (61,4), (62,4), (63,4), (64,4), (65,4), (66,4), (67,4), (68,4), (69,4), (70,4), (71,4), (72,4), (73,4), (74,4), (75,4), (76,4), (77,4), (78,4), (79,4), (80,4), (81,4), (82,4), (83,4), (84,4), (85,4), (86,4), (87,4), (88,4), (89,4), (90,4), (91,4), (92,4), (93,4), (94,4), (95,4), (96,4), (97,4), (98,4), (99,4))
-        #lane2.add_lane((99, 3), (98, 3), (97, 3), (96, 3), (95, 3), (94, 3), (93, 3), (92, 3), (91, 3), (90, 3), (89, 3), (88, 3), (87, 3), (86, 3), (85, 3), (84, 3), (83, 3), (82, 3), (81, 3), (80, 3), (79, 3), (78, 3), (77, 3), (76, 3), (75, 3), (74, 3), (73, 3), (72, 3), (71, 3), (70, 3), (69, 3), (68, 3), (67, 3), (66, 3), (65, 3), (64, 3), (63, 3), (62, 3), (61, 3), (60, 3), (59, 3), (58, 3), (57, 3), (56, 3), (55, 3), (54, 3), (53, 3), (52, 3), (51, 3), (50, 3), (49, 3), (48, 3), (47, 3), (46, 3), (45, 3), (44, 3), (43, 3), (42, 3), (41, 3), (40, 3), (39, 3), (38, 3), (37, 3), (36, 3), (35, 3), (34, 3), (33, 3), (32, 3), (31, 3), (30, 3), (29, 3), (28, 3), (27, 3), (26, 3), (25, 3), (24, 3), (23, 3), (22, 3), (21, 3), (20, 3), (19, 3), (18, 3), (17, 3), (16, 3), (15, 3), (14, 3), (13, 3), (12, 3), (11, 3), (10, 3), (9, 3), (8, 3), (7, 3), (6, 3), (5, 3), (4, 3), (3, 3), (2, 3), (1, 3), (1, 2), (1, 1), (1, 0))
-
-
-        # other positions
-        #lane4.add_lane((3,1), (4,1), (5,1), (5,2), (5,3), (5,4), (5,5), (5,6), (5,7), (5,8), (5,9), (5,10), (5,11), (5,12), (5,13), (5,14), (5,15), (5,16), (5,17), (5,18), (5,19), (5,20), (5,21), (5,22), (5,23), (5,24), (5,25), (5,26), (5,27), (5,28), (5,29), (5,30), (5,31), (5,32), (5,33), (5,34), (5,35), (5,36), (5,37), (5,38), (5,39), (5,40), (5,41), (5,42), (5,43), (5,44), (5,45), (5,46), (5,47), (5,48), (5,49), (5,50), (5,51), (5,52), (5,53), (5,54), (5,55), (5,56), (5,57), (5,58), (5,59), (5,60), (5,61), (5,62), (5,63), (5,64), (5,65), (5,66), (5,67), (5,68), (5,69), (5,70), (5,71), (5,72), (5,73), (5,74), (5,75), (5,76), (5,77), (5,78), (5,79), (5,80), (5,81), (5,82), (5,83), (5,84), (5,85), (5,86), (5,87), (5,88), (5,89), (5,90), (5,91), (5,92), (5,93), (5,94), (5,95), (5,96), (5,97), (5,98), (6,98))
-        #lane3.add_lane((6, 98), (6, 97), (6, 96), (6, 95), (6, 94), (6, 93), (6, 92), (6, 91), (6, 90), (6, 89), (6, 88), (6, 87), (6, 86), (6, 85), (6, 84), (6, 83), (6, 82), (6, 81), (6, 80), (6, 79), (6, 78), (6, 77), (6, 76), (6, 75), (6, 74), (6, 73), (6, 72), (6, 71), (6, 70), (6, 69), (6, 68), (6, 67), (6, 66), (6, 65), (6, 64), (6, 63), (6, 62), (6, 61), (6, 60), (6, 59), (6, 58), (6, 57), (6, 56), (6, 55), (6, 54), (6, 53), (6, 52), (6, 51), (6, 50), (6, 49), (6, 48), (6, 47), (6, 46), (6, 45), (6, 44), (6, 43), (6, 42), (6, 41), (6, 40), (6, 39), (6, 38), (6, 37), (6, 36), (6, 35), (6, 34), (6, 33), (6, 32), (6, 31), (6, 30), (6, 29), (6, 28), (6, 27), (6, 26), (6, 25), (6, 24), (6, 23), (6, 22), (6, 21), (6, 20), (6, 19), (6, 18), (6, 17), (6, 16), (6, 15), (6, 14), (6, 13), (6, 12), (6, 11), (6, 10), (6, 9), (6, 8), (6, 7), (6, 6), (6, 5), (6, 4), (6, 3), (6, 2), (6, 1), (6, 0), (5, 0), (4, 0), (3, 0), (3, 1))
-
-
         lane5 = Lane(5)
         lane6 = Lane(6)
+        lane7 = Lane(7)
+        lane8 = Lane(8)
+        lane9 = Lane(9)
+        lane10 = Lane(10)
+        lane11 = Lane(11)
+        lane12 = Lane(12)
+        lane13 = Lane(13)
+        lane14 = Lane(14)
 
-        lane1.add_lane((1,1), (2,1), (3,1), (4,1), (5,1), (5,2), (5,3), (5,4),(5,5), (5,6), (4,6), (3,6), (2,6), (1,6), (1,5), (1,4), (1,3), (1,2), (1,1))
-        lane2.add_lane((0,1), (0,2), (0,3), (0,4), (0,5), (0,6), (0,7), (1,7), (2,7), (3,7), (4,7), (5,7), (6,7), (6,6), (6,5), (6,4), (6,3), (6,2), (6,1), (6,0), (5,0), (4,0), (3,0), (2,0), (1,0), (0,0), (0,1))
+        lane1.add_lane((5,7), (6,7), (6,6), (6,5), (6,4), (6,3), (6,2), (6,1), (6,0), (5,0), (4,0), (3,0), (2,0), (1,0), (0,0), (0,1), (0,2), (0,3), (0,4), (0,5), (0,6), (0,7), (0,8), (0,9), (0,10), (0,11), (0,12), (0,13), (0,14), (0,15), (0,16), (0,17), (1,17), (2,17), (3,17), (4,17), (5,17), (6,17), (6,16))
+        lane2.add_lane((6,16), (5,16), (4,16), (3,16), (2,16), (1,16), (1,15), (1,14), (1,13), (1,12), (1,11), (1,10), (1,9), (1,8), (1,7), (1,6), (1,5), (1,4), (1,3), (1,2), (1,1), (2,1), (3,1), (4,1), (5,1), (5,2), (5,3), (5,4), (5,5), (5,6), (5,7))
 
         lane3.add_lane((13,7), (13,6), (12,6), (11,6), (10,6), (9,6), (8,6), (7,6), (6,6), (5,6), (5,7))
         lane4.add_lane((5,6), (5,7), (6,7), (7,7), (8,7), (9,7),(10,7), (11,7), (12,7), (13,7))
 
-        lane5.add_lane((12,7), (12,8), (12,9), (12, 10),(12,11), (12,12), (12, 13), (13,13), (14,13), (15,13), (16,13), (17,13), (17,12), (17, 11), (17, 10), (17, 9), (17, 8), (17, 7), (17,6), (17,5), (17,4), (17,3), (17,2), (17,1), (17,0), (16,0), (15,0), (14,0), (13,0), (12,0), (12,1), (12,2), (12,3), (12,4), (12,5), (12,6), (12,7))
-        lane6.add_lane((13,7), (13,6), (13,5), (13,4), (13,3), (13,2), (13,1), (14,1), (15,1), (16,1), (16,2), (16,3), (16,4), (16,5), (16,6), (16,7), (16,8), (16,9), (16,10), (16,11), (16,12), (15,12), (14,12), (13,12), (13,11), (13,10), (13,9), (13,8), (13,7))
+        lane5.add_lane((28, 12), (29, 12), (29, 11), (29, 10), (29, 9), (29, 8), (29, 7), (29, 6), (29, 5), (29, 4), (29, 3), (29, 2), (29, 1), (29, 0), (28, 0), (27, 0), (26, 0), (25, 0), (24, 0), (23, 0), (22, 0), (21, 0), (20, 0), (19, 0), (18, 0), (17, 0), (16, 0), (15, 0), (14, 0), (13, 0), (12, 0), (12, 1), (12, 2), (12, 3), (12, 4), (12, 5), (12, 6), (12, 7), (12, 8), (12, 9), (12, 10), (12, 11), (12, 12), (13, 12), (14, 12), (15, 12), (16, 12), (17, 12), (18, 12), (19, 12))
+        lane6.add_lane((19,12), (19,11), (18,11), (17,11), (16,11), (15,11), (14,11), (13,11), (13,10), (13,9), (13,8), (13,7), (13,6), (13,5), (13,4), (13,3), (13,2), (13,1), (14,1), (15,1), (16,1), (17,1), (18,1), (19,1), (20,1), (21,1), (22,1), (23,1), (24,1), (25,1), (26,1), (27,1), (28,1), (28,2), (28,3), (28,4), (28,5), (28,6), (28,7), (28,8), (28,9), (28,10), (28,11), (28,12))
+
+        lane7.add_lane((29, 11), (28, 11), (27, 11), (26, 11), (25, 11), (24, 11), (23, 11), (22, 11), (21, 11), (20, 11), (19, 11), (18, 11))
+        lane8.add_lane((18,11), (18,12), (19,12), (20,12), (21,12), (22,12), (23,12), (24,12), (25,12), (26,12), (27,12), (28,12), (29,12), (29,11))
+
+        lane9.add_lane((5,17), (6,17), (6,16), (6,15), (6,14), (6,13), (6,12), (6,11), (6,10), (6,9), (6,8), (6,7), (6,6), (5,6))
+        lane10.add_lane((5,6), (5,7), (5,8), (5,9), (5,10), (5,11), (5,12), (5,13), (5,14), (5,15), (5,16), (5,17))
+
+        lane11.add_lane((19, 11), (18, 11), (18, 12), (18, 13), (18, 14), (18, 15), (18, 16), (17, 16), (16, 16), (15, 16), (14, 16), (13, 16), (12, 16), (11, 16), (10, 16), (9, 16), (8, 16), (7, 16), (6, 16), (5, 16), (5, 17))
+        lane12.add_lane((5,17), (6,17), (7,17), (8,17), (9,17), (10,17), (11,17), (12,17), (13,17), (14,17), (15,17), (16,17), (17,17), (18,17), (19,17), (19,16), (19,15), (19,14), (19,13), (19,12), (19,11))
+
+        lane13.add_lane((29, 11), (28, 11), (28, 12), (28, 13), (28, 14), (28, 15), (28, 16), (28, 17), (28, 18), (28, 19), (28, 20), (28, 21), (28, 22), (28, 23), (28, 24), (28, 25), (28, 26), (28, 27), (27, 27), (26, 27), (25, 27), (24, 27), (23, 27), (22, 27), (21, 27), (20, 27), (19, 27), (18, 27), (17, 27), (16, 27), (15, 27), (14, 27), (13, 27), (12, 27), (11, 27), (10, 27), (9, 27), (8, 27), (7, 27), (6, 27), (6, 26), (6, 25), (6, 24), (6, 23), (6, 22), (6, 21), (6, 20), (6, 19), (6, 18), (6, 17), (6, 16), (5, 16))
+        lane14.add_lane((5,16), (5,17), (5,18), (5,19), (5,20), (5,21), (5,22), (5,23), (5,24), (5,25), (5,26), (5,27), (5,28), (6,28), (7,28), (8,28), (9,28), (10,28), (11,28), (12,28), (13,28), (14,28), (15,28), (16,28), (17,28), (18,28), (19,28), (20,28), (21,28), (22,28), (23,28), (24,28), (25,28), (26,28), (27,28), (28,28), (29,28), (29,27), (29,26), (29,25), (29,24), (29,23), (29,22), (29,21), (29,20), (29,19), (29,18), (29,17), (29,16), (29,15), (29,14), (29,13), (29,12), (29,11))
 
         # making a road with lanes
         road_1.add_lane(lane1)
@@ -696,55 +768,108 @@ class Environment:
         road_2.add_lane(lane4)
         road_3.add_lane(lane5)
         road_3.add_lane(lane6)
-        
-        intersection_1 = Intersection("Intersection_1@localhost", road_1, road_2, None, None, (5,5,6, 6), (6, 7, 6,7))
-        intersection_2 = Intersection("Intersection_2@localhost", road_2, road_3, None, None, (12,12,13,13), (6,7,6,7))
+        road_4.add_lane(lane7)
+        road_4.add_lane(lane8)
+        road_5.add_lane(lane9)
+        road_5.add_lane(lane10)
+        road_6.add_lane(lane11)
+        road_6.add_lane(lane12)
+        road_7.add_lane(lane13)
+        road_7.add_lane(lane14)
+
+        intersection_1 = Intersection("Intersection_1@localhost", road_1, road_2, road_5, None, (5, 5, 6, 6), (6, 7, 6, 7))
+        intersection_2 = Intersection("Intersection_2@localhost", road_2, road_3, None, None, (12, 12, 13, 13), (6, 7, 6, 7))
+        intersection_3 = Intersection("Intersection_3@localhost", road_1, road_5, road_6, road_7, (5, 5, 6, 6), (16, 17, 16, 17))
+        intersection_4 = Intersection("Intersection_4@localhost", road_3, road_6, road_4, None, (18, 18, 19, 19), (11, 12, 11, 12))
+        intersection_5 = Intersection("Intersection_5@localhost", road_3, road_4, road_7, None, (28, 28, 29, 29), (11, 12, 11, 12))
 
         # data structures to keep the data related to the environment
-        self.roads = [road_1, road_2, road_3, road_4]
+        self.roads = [road_1, road_2, road_3, road_4, road_5, road_6, road_7]
 
-        self.intersections = [intersection_1, intersection_2]
+        self.intersections = [intersection_1, intersection_2, intersection_3, intersection_4, intersection_5]
 
-        self.lanes = [lane1, lane2, lane3, lane4, lane5, lane6]
+        self.lanes = [lane1, lane2, lane3, lane4, lane5, lane6, lane7, lane8, lane9, lane10, lane11, lane12, lane13, lane14]
 
-        trafficLight1 = TrafficLight("TLAgent-1@localhost", intersection_1, 'Green', 'Intermitent', road_1, 4, 7)
-        trafficLight2 = TrafficLight("TLAgent-2@localhost", intersection_1, 'Green', 'Intermitent', road_1, 7, 6)
-        #trafficLight3 = TrafficLight(3, intersection_1, 'Red', 'Intermitent', road_2, 6, 8)
-        trafficLight4 = TrafficLight("TLAgent-4@localhost", intersection_1, 'Red', 'Intermitent', road_2, 5, 5)
-
-        trafficLight5 = TrafficLight("TLAgent-5@localhost", intersection_2, 'Red', 'Intermitent', road_2, 11, 7)
+        trafficLight1 = TrafficLight("TLAgent-1@localhost", intersection_1, 'Green', 'Intermitent', road_1, 5, 5)
+        trafficLight2 = TrafficLight("TLAgent-2@localhost", intersection_1, 'Red', 'Intermitent', road_2, 7, 6)
+        trafficLight3 = TrafficLight("TLAgent-3@localhost", intersection_1, 'Green', 'Intermitent', road_5, 6, 8)
+        trafficLight4 = TrafficLight("TLAgent-4@localhost", intersection_2, 'Red', 'Intermitent', road_2, 11, 7)
+        trafficLight5 = TrafficLight("TLAgent-5@localhost", intersection_2, 'Green', 'Intermitent', road_3, 12, 5)
         trafficLight6 = TrafficLight("TLAgent-6@localhost", intersection_2, 'Green', 'Intermitent', road_3, 13, 8)
-        trafficLight7 = TrafficLight("TLAgent-7@localhost", intersection_2, 'Green', 'Intermitent', road_3, 12, 5)
+        trafficLight7 = TrafficLight("TLAgent-7@localhost", intersection_3, 'Red', 'Intermitent', road_1, 4, 17)
+        trafficLight8 = TrafficLight("TLAgent-8@localhost", intersection_3, 'Green', 'Intermitent', road_5, 5, 15)
+        trafficLight9 = TrafficLight("TLAgent-9@localhost", intersection_3, 'Red', 'Intermitent', road_6, 7, 16)
+        trafficLight10 = TrafficLight("TLAgent-10@localhost", intersection_3, 'Green', 'Intermitent', road_7, 6, 18)
+        trafficLight11 = TrafficLight("TLAgent-11@localhost", intersection_4, 'Green', 'Intermitent', road_3, 17, 12)
+        trafficLight12 = TrafficLight("TLAgent-12@localhost", intersection_4, 'Red', 'Intermitent', road_6, 19, 13)
+        trafficLight13 = TrafficLight("TLAgent-13@localhost", intersection_4, 'Green', 'Intermitent', road_4, 20, 11)
+        trafficLight14 = TrafficLight("TLAgent-14@localhost", intersection_5, 'Green', 'Intermitent', road_4, 27, 12)
+        trafficLight15 = TrafficLight("TLAgent-15@localhost", intersection_5, 'Red', 'Intermitent', road_3, 28, 10)
+        trafficLight16 = TrafficLight("TLAgent-16@localhost", intersection_5, 'Red', 'Intermitent', road_7, 29, 13)
 
         intersection_1.add_tlight(trafficLight1)
         intersection_1.add_tlight(trafficLight2)
-        #intersection_1.add_tlight(trafficLight3)
-        intersection_1.add_tlight(trafficLight4)
-
+        intersection_1.add_tlight(trafficLight3)
+        intersection_2.add_tlight(trafficLight4)
         intersection_2.add_tlight(trafficLight5)
         intersection_2.add_tlight(trafficLight6)
-        intersection_2.add_tlight(trafficLight7)
+        intersection_3.add_tlight(trafficLight7)
+        intersection_3.add_tlight(trafficLight8)
+        intersection_3.add_tlight(trafficLight9)
+        intersection_3.add_tlight(trafficLight10)
+        intersection_4.add_tlight(trafficLight11)
+        intersection_4.add_tlight(trafficLight12)
+        intersection_4.add_tlight(trafficLight13)
+        intersection_5.add_tlight(trafficLight14)
+        intersection_5.add_tlight(trafficLight15)
+        intersection_5.add_tlight(trafficLight16)
 
-        self.traffic_lights = [trafficLight1, trafficLight2, trafficLight4, trafficLight5, trafficLight6, trafficLight7]
+        self.traffic_lights = [trafficLight1, trafficLight2, trafficLight3, trafficLight4, trafficLight5, trafficLight6, trafficLight7, trafficLight8, trafficLight9, trafficLight10, trafficLight11, trafficLight12, trafficLight13, trafficLight14, trafficLight15, trafficLight16]
 
-        self.car2 = Car("Vehicle-2@localhost", 2, 1)
-        self.car3= Car("Vehicle-3@localhost", 5, 3)
+
         self.car1 = Car("Vehicle-1@localhost", 0, 0)
+        self.car2 = Car("Vehicle-2@localhost", 2, 1)
+        self.car3 = Car("Vehicle-3@localhost", 5, 4)
+        self.car4 = Car("Vehicle-4@localhost", 28, 13)
+        self.car5 = Car("Vehicle-5@localhost", 29, 5)
+        self.car6 = Car("Vehicle-6@localhost", 6, 9)
+        self.car7 = Car("Vehicle-7@localhost", 13, 16)
+        self.car8 = Car("Vehicle-8@localhost", 28, 3)
+        self.car9 = Car("Vehicle-9@localhost", 6, 24)
+        self.car10 = Car("Vehicle-10@localhost", 5, 28)
+        self.car11 = Car("Vehicle-11@localhost", 12, 10)
+        self.car12 = Car("Vehicle-12@localhost", 13, 2)
+        self.car13 = Car("Vehicle-13@localhost", 20, 0)
+        self.car14 = Car("Vehicle-14@localhost", 27, 1)
+        self.car15 = Car("Vehicle-15@localhost", 6, 20)
+        self.car16 = Car("Vehicle-16@localhost", 5, 2)
+        self.car17 = Car("Vehicle-17@localhost", 0, 17)
+        self.car18 = Car("Vehicle-18@localhost", 11, 16)
+        self.car19 = Car("Vehicle-19@localhost", 24, 11)
+        self.car20 = Car("Vehicle-20@localhost", 27, 12)
 
-        self.cars = [self.car1, self.car2, self.car3]
+
+        self.cars = [self.car1, self.car2, self.car3, self.car4, self.car5, self.car6, self.car7, self.car8, self.car9, self.car10,self.car11, self.car12, self.car13, self.car14, self.car15, self.car16, self.car17, self.car18, self.car19, self.car20]
 
         self.map = Map()
 
-        
+    def zoom_in(self):
+        self.zoom_level *= 1.1
+
+    def zoom_out(self):
+        self.zoom_level /= 1.1
+
+    def pan(self, delta_x, delta_y):
+        self.offset_x += delta_x
+        self.offset_y += delta_y
+
     def add_road(self, road):
         self.roads.append(road)
-
 
     def add_intersection(self, intersection):
         self.intersections.append(intersection)
 
-
-    # displays the environment
+    # displays the environment.
     def display(self):
         for road in self.roads:
             print(f"{road.name}: ", end='')
@@ -767,7 +892,7 @@ if __name__ == "__main__":
     async def main():
         simulation_task = asyncio.create_task(env.map.draw_map())
 
-        await asyncio.gather(*[ agent.start() for agent in env.cars ],*[tlight.start() for tlight in env.traffic_lights],*[intersection.start() for intersection in env.intersections], simulation_task)
+        await asyncio.gather(*[ agent.start() for agent in env.cars ],*[intersection.start() for intersection in env.intersections], *[tlight.start() for tlight in env.traffic_lights], simulation_task)
 
         await spade.wait_until_finished(*[ agent for agent in env.cars ])
 
