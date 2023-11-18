@@ -1,7 +1,6 @@
-from os import wait
+from gettext import find
 import random
 import time
-from typing import Any, Coroutine, Optional
 from spade.agent import Agent
 from spade.behaviour import CyclicBehaviour
 from spade.message import Message
@@ -19,6 +18,7 @@ vehicles_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
 lanes_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
 intersections_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
 
+
 class Map:
     def __init__(self):
         pass
@@ -27,8 +27,10 @@ class Map:
     def update_traffic_lights(self, x, y, info):
         traffic_lights_grid[x][y] = info
 
+
     def update_vehicles(self, x, y, info):
         vehicles_grid[x][y] = info
+
 
     def update_lanes(self, x, y, info):
         if lanes_grid[x][y] is None:
@@ -40,6 +42,7 @@ class Map:
     def update_intersections(self, x, y, info):
         intersections_grid[x][y] = info
     
+
     def WhatsNextLane(self, x,y):
         # display the movements avaible for the car, so if it is in the intersection display the lanes that the car can go, if it is in the lane display the next lane
         # use spade to get the position of the car and sent him the next avaible positions so he can go to
@@ -52,9 +55,10 @@ class Map:
             for i in range(len(env.lanes)):
                 for k in range(len(lanes_grid[x][y])):
                     if env.lanes[i].lane_id == lanes_grid[x][y][k]:
-                        lanes.append(env.lanes[i].next_position(x,y))                        
+                        lanes.append(env.lanes[i].next_position(x, y))                        
                         break
             return lanes
+
 
     def IsThereTrafficLight(self, x, y):
         # check if there is a traffic light in the position
@@ -62,6 +66,7 @@ class Map:
             return traffic_lights_grid[x][y]
         return False
     
+
     def IsThereCar(self, x, y):
         #print (f"Verificar          {x, y}, {vehicles_grid[x][y]}")
         # check if there is a car in the position
@@ -73,8 +78,9 @@ class Map:
 
     async def draw_map(self):
         pygame.init()
-        screen_width, screen_height = 1000, 1000
-        screen = pygame.display.set_mode((screen_width, screen_height))
+        auto = pygame.display.Info().current_w, pygame.display.Info().current_h
+        screen_width, screen_height = 400,400
+        screen = pygame.display.set_mode((screen_width, screen_height), pygame.RESIZABLE)
         pygame.display.set_caption('Traffic Simulation')
 
         lane_color = (169, 169, 169)  # Gray
@@ -144,79 +150,95 @@ class Map:
                     pygame.draw.rect(screen, greenback, (xs[i] * cell_size, ys[i] * cell_size, cell_size, cell_size))
                     if (vehicles_grid[xs[i]][ys[i]] is not None and vehicles_grid[xs[i]][ys[i]] != 0) :
                         pygame.draw.rect(screen, car_pink, (xs[i] * cell_size, ys[i] * cell_size, cell_size, cell_size))
-
-                    
+   
             pygame.display.flip()
             await asyncio.sleep(0.1)
 
         pygame.quit()
-
-
     
     
 class TrafficLight(Agent):
-    def __init__(self, id , intersection, colorfront, colorleft, road, cordX, cordY):
+    def __init__(self, id, intersection, colorfront, colorleft, road, cordX, cordY):
         Agent.__init__(self, id, "password")
         self.id = id
         self.colorfront = colorfront
         self.colorleft = colorleft
         self.intersection = intersection
-        self.num_cars_waiting = 0 # number of cars waiting at the traffic light
-        self.waitingTime=0 
         self.road = road
         self.cordX = cordX
         self.cordY = cordY
-        self.map=Map()
+        self.map = Map()
         self.map.update_traffic_lights(cordX, cordY, id)
-        self.waiting=False
-        
+
     async def setup(self):
         b = self.TrafficLight(self, self.map)
         self.add_behaviour(b)
         await self.behaviours[0].run()
 
     class TrafficLight(CyclicBehaviour):
-        def __init__(self,agent, map):
+        def __init__(self, agent, map):
             super().__init__()
-            self.agent=agent
-            self.map=map
-            self.waitingTime=0
+            self.agent = agent
+            self.map = map
+
 
         async def receiveMessage(self):
-            msg = await self.receive(timeout=10) # wait for a message for 10 seconds
+            msg = await self.receive(timeout = 0.01) # wait for a message for 10 seconds
             if msg:
-                print("Message received with content: {}".format(msg.body))
-                self.waitingTime = int(msg.body)
-                return self.waitingTime
+                print(f"{self.agent.id} received the message with content: {msg.body} from {msg.sender}")
+                waiting_times = eval(msg.body)
+                return waiting_times
             else:
-                print("Did not received any message after 10 seconds")
+                #print("Did not received any message after 10 seconds")
+                return None
+
+
+        async def send_score(self, score):
+            receiver=self.agent.intersection.id
+            msg = Message(to = receiver , sender = self.agent.id) 
+            msg.set_metadata("performative", "inform")
+            msg.body = str(score)
+
+            # Send the message
+            #print(f"*********Sending score to {receiver} from {self.agent.id}**********")
+            await self.send(msg)
+
 
         async def run(self):
             while True:
-                await self.receiveMessage()
-                self.agent.asking_to_change(self.waitingTime)
-                if (self.agent.get_color=='Green'):
-                    self.waitingTime=0
-                    self.agent.waiting=False
+                waiting_times = await self.receiveMessage()
+                score={'points': 0, 'car_platoon': 0}
+                if waiting_times is not None:
+                    score = self.agent.heuristic(waiting_times)
+                if (self.agent.get_color()=='Red'): await self.send_score(score)
                 await asyncio.sleep(1)
 
 
+    def heuristic(self, waiting_times):
+        points = 0
+        sum = 0
+        length = len(waiting_times)
+        for i in range(len(waiting_times)):
+            sum += waiting_times[i]
+        points = (3 * length) + (1 * sum)
+        reactiontime=2*length
+        return {'points': points, 'car_platoon': reactiontime}
+        
 
     def change(self, new_colorfront, new_colorleft):
         self.colorfront = new_colorfront
         self.colorleft = new_colorleft
 
 
-    
     def asking_to_change(self, waiting_time):
         if self.colorfront == "Red":
             if waiting_time >= 4:
-                self.waiting=True
+                self.waiting = True
                 return True
-        self.waiting=False
+        self.waiting = False
         return False
         
-    
+
     def get_color(self):
         if self.colorfront == "Green":
             return "Green"
@@ -235,21 +257,20 @@ class Intersection(Agent):
         self.road3 = road3
         self.road4 = road4
         self.tlights = []
+        self.scores= {'tf1': {'points': 0, 'car_platoon': 0}, 'tf2': {'points': 0, 'car_platoon': 0}, 'tf3': {'points': 0, 'car_platoon': 0}, 'tf4': {'points': 0, 'car_platoon': 0}}
         self.x = x
         self.y = y
-        self.map=Map()
+        self.map = Map()
         self.addcoord()
 
-    # traffic lights
+
     def add_tlight(self, tlight):
         self.tlights.append(tlight)
-    
-    # Logic of the lights btween the two roads and traffic lights
-    # if the road is the same btween the traffic lights, then the traffics lights will be at the same color
 
     def addcoord(self):
         for i in range(len(self.x)):
             self.map.update_intersections(self.x[i], self.y[i], self.name)
+
 
     def change(self, color1, color2):
         if color1 == 'Green':
@@ -267,104 +288,163 @@ class Intersection(Agent):
             color2left = 'Red'
             
         for i in range(len(self.tlights)):
-            if self.tlights[i].road==self.road1 or self.tlights[i].road==self.road3:
+            if self.tlights[i].road == self.road1 or self.tlights[i].road == self.road3:
                 self.tlights[i].change(color1, color1left)
                 print(f"Traffic Light Agent {self.tlights[i].id}: Front: {color1}; Left: {color1left}")
 
-            elif self.tlights[i].road==self.road2 or self.tlights[i].road==self.road4:
+            elif self.tlights[i].road == self.road2 or self.tlights[i].road == self.road4:
                 self.tlights[i].change(color2, color2left)
                 print(f"Traffic Light Agent {self.tlights[i].id}: Front: {color2}; Left: {color2left}")
 
+
+        
     def askedChange(self):
         for i in range(len(self.tlights)):
-            if self.tlights[i].waiting==True:
-                self.tlights[i].waiting=False
+            if self.tlights[i].waiting == True:
+                self.tlights[i].waiting = False
                 return {'boolVal': True,'id': self.tlights[i].id}
+
+    def find_tlight(self, id):
+        for i in range(len(self.tlights)):
+            if str(self.tlights[i].id).lower() == str(id).lower():
+                return self.tlights[i]
+
+    def find_tlight_by_score(self, score):
+        if score == 'tf1' and len(self.tlights) > 0:
+            tlight=self.find_tlight_by_road(self.road1)
+            return tlight
+        elif score == 'tf2' and len(self.tlights) > 1:
+            tlight=self.find_tlight_by_road(self.road2)
+            return tlight
+        elif score == 'tf3' and len(self.tlights) > 2:
+            tlight=self.find_tlight_by_road(self.road3)
+            return tlight
+        elif score == 'tf4' and len(self.tlights) > 3:
+            tlight=self.find_tlight_by_road(self.road4)
+            return tlight
+        else:
+            return None
+
+    def find_tlight_by_road(self, road):
+        for tl in self.tlights:
+            if tl.road == road:
+                return tl
+
+    def tlight_with_more_points(self):
+        max_points = 0
+        tlight_to_change = None
+        reaction_time = 0
+        for score in self.scores:
+            if self.scores[score]['points'] >= max_points:
+                max_points = self.scores[score]['points']
+                tlight_to_change = self.find_tlight_by_score(score)
+                reaction_time = self.scores[score]['car_platoon']
+        return {'tlight': tlight_to_change, 'reaction_time': reaction_time}
+
+    def clear_scores(self):
+        for score in self.scores:
+            self.scores[score]['points'] = 0
+            self.scores[score]['car_platoon'] = 0
 
     async def setup(self):
         b = self.Intersection(self)
         self.add_behaviour(b)
         await self.behaviours[0].run()
+
+
     class Intersection(CyclicBehaviour):
         def __init__(self, agent):
             super().__init__()
-            self.agent=agent
+            self.agent = agent
         
-        
+        async def change_by_tlight(self, tlight):
+            if tlight is not None:
+                if tlight.road == self.agent.road1 or tlight.road == self.agent.road3:
+                    if (tlight.colorfront == 'Yellow') and (tlight.colorleft == 'Yellow'):
+                        self.agent.change('Red', 'Green')
+                    
+                    elif (tlight.colorfront == 'Red') and (tlight.colorleft == 'Intermitent'):
+                        self.agent.change('Red', 'Yellow')
+                        await asyncio.sleep(2)
+                        self.agent.change('Green', 'Red')
+
+                    elif (tlight.colorfront == 'Red') and (tlight.colorleft == 'Red'):
+                        self.agent.change('Red', 'Yellow')
+                        await asyncio.sleep(2)
+                        self.agent.change('Green', 'Red')
+
+                elif tlight.road == self.agent.road2 or tlight.road == self.agent.road4:
+                    if (tlight.colorfront == 'Yellow') and (tlight.colorleft == 'Yellow'):
+                        self.agent.change('Green', 'Red')
+                    
+                    elif (tlight.colorfront == 'Red') and (tlight.colorleft == 'Intermitent'):
+                        self.agent.change('Yellow', 'Red')
+                        await asyncio.sleep(2)
+                        self.agent.change('Red', 'Green')
+
+                    elif (tlight.colorfront == 'Red') and (tlight.colorleft == 'Red'):
+                        self.agent.change('Yellow', 'Red')
+                        await asyncio.sleep(2)
+                        self.agent.change('Red', 'Green')
+
+
+        async def receiveMessage(self):
+            msg = await self.receive(timeout=0.01)
+
+            if msg:
+                print(f"-- Intersection {self.agent.id} receive message from {msg.sender} with content: {msg.body} --")
+                scores={'sender': msg.sender, 'body': eval(msg.body)}
+                await self.arrange_scores(scores)
+                #await self.receiveMessage()
+            else:
+                pass
+            
+        async def arrange_scores(self, scores):
+            #print(f"checkkkk  {scores['sender']}    {scores['body']}")
+            #print (f"----sender {scores['sender']}")
+            tlight=self.agent.find_tlight(scores['sender'])
+            #print (f"----tlight {tlight.id}")
+            if tlight is not None:
+                print(f"checkkkk  {tlight.id}    {scores['body']}")
+                if tlight.road == self.agent.road1:
+                    self.agent.scores['tf1']['points'] += scores['body']['points']
+                    self.agent.scores['tf1']['car_platoon'] = max(self.agent.scores['tf1']['car_platoon'],scores['body']['car_platoon'])
+                elif tlight.road == self.agent.road2:
+                    self.agent.scores['tf2']['points'] += scores['body']['points']
+                    self.agent.scores['tf2']['car_platoon'] = max(self.agent.scores['tf2']['car_platoon'],scores['body']['car_platoon'])
+                elif tlight.road == self.agent.road3:
+                    self.agent.scores['tf3']['points'] += scores['body']['points']
+                    self.agent.scores['tf3']['car_platoon'] = max(self.agent.scores['tf3']['car_platoon'],scores['body']['car_platoon'])
+                elif tlight.road == self.agent.road4:
+                    self.agent.scores['tf4']['points'] += scores['body']['points']
+                    self.agent.scores['tf4']['car_platoon'] = max(self.agent.scores['tf4']['car_platoon'],scores['body']['car_platoon'])
+            await self.print_scores()
+                    
+
+        async def print_scores(self):
+            print("+---------------------------------------------+")
+            print("|Scores:                                      |")
+            for road in self.agent.scores:
+                print(f"|Road {road}: {self.agent.scores[road]['points']} points                           |")
+            print("+---------------------------------------------+")
+
         async def run(self):
-            # see what road have red color
-            color2 = 'Red'
-            color1 = 'Green'
-            while  True:
-                tlight_cache=None
-                green_time = 0
-                while green_time <= 10:  # Green for up to 10 seconds
-                    print (f"green time {green_time}")
-                    askedChange=None
-                    change_requested=False
-                    tlight_id=None
-                    askedChange=self.agent.askedChange()
-                    if askedChange is not None:
-                        #print(f"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa   {askedChange['id']}")
-                        
-                        change_requested=askedChange['boolVal']
-                        tlight_id =askedChange['id']
-
-                    else:
-                        change_requested=False
-                        tlight_id=None
-                        
-                    if change_requested and tlight_id != tlight_cache:
-                        tlight_cache=None
-                        # If a change is requested, immediately change the traffic light to green
-                        ## find the road of the id
-                        road=(None,0)
-                        for i in range(len(self.agent.tlights)):
-                            if self.agent.tlights[i].id==tlight_id:
-                                road=self.agent.tlights[i].road
-
-                                #break
-                        if road==self.agent.road1 or road==self.agent.road3:
-                            self.agent.change('Red', 'Yellow')
-                            #print(f"111111--------------- {tlight_id}  -----------------")
-                            await asyncio.sleep(3)
-                            color1 = 'Green'
-                            color2 = 'Red'
-                            self.agent.change(color1, color2)
-                            green_time=0
-                            tlight_cache=tlight_id
-                        elif road==self.agent.road2 or road==self.agent.road4:
-                            self.agent.change('Yellow', 'Red')
-                            #print(f"2222222---------------{tlight_id}  -----------------")
-                            await asyncio.sleep(3)
-                            color1 = 'Red'
-                            color2 = 'Green'
-                            self.agent.change(color1, color2)
-                            green_time=0
-                            road=(None,0)
-                            tlight_cache=tlight_id
-                        print(f"Traffic Light Agent {tlight_id} changed to Green due to request.")
-                        #break
-                    else:
-                        pass
-                        #self.change('Green', 'Red')
-                    await asyncio.sleep(1)  # Sleep for 1 second
-                    green_time += 1
-
-
-                if color1 == 'Red':
-                    self.agent.change('Red', 'Yellow')
-                    await asyncio.sleep(3)
-                    color1 = 'Green'
-                    color2 = 'Red'
-                    self.agent.change(color1, color2)
-                elif color2 == 'Red':
-                    self.agent.change('Yellow', 'Red')
-                    await asyncio.sleep(3)
-                    color1 = 'Red'
-                    color2 = 'Green'
-                    self.agent.change(color1, color2)
-
+            while True:
+                await self.receiveMessage()
+                time=1 
+                tlight_to_change=None
+                tlight_to_change=self.agent.tlight_with_more_points()
+                if tlight_to_change is not None and tlight_to_change['tlight'] is not None:
+                    print(f"Changing traffic light {tlight_to_change['tlight'].id}")
+                    time=tlight_to_change['reaction_time']
+                    if (time>10): time=10
+                    tlight_to_change=tlight_to_change['tlight']
+                    await self.change_by_tlight(tlight_to_change)
+                    self.agent.clear_scores()
+                else:
+                    pass
+                
+                await asyncio.sleep(time)
 
 
 
@@ -375,7 +455,7 @@ class Car(Agent):
         self.car_id = car_id
         self.x = x
         self.y = y
-        self.map=Map()
+        self.map = Map()
         self.map.update_vehicles(x, y, car_id)
 
     async def setup(self):
@@ -411,17 +491,13 @@ class Car(Agent):
                         if tl.id == tl_id:
                             if tl.get_color() == 'Red':
                                 # if the traffic light is red, the car will wait
-                                tl.num_cars_waiting += 1
                                 while tl.get_color() == 'Red':
                                     return {'isThere': True, 'id': tl.id}
-                                tl.num_cars_waiting -= 1
                                 break
                             elif tl.get_color() == 'Yellow':
                                 # if the traffic light is yellow, the car will wait
-                                tl.num_cars_waiting += 1
                                 while tl.get_color() == 'Yellow':
                                     return {'isThere': True, 'id': tl.id}
-                                tl.num_cars_waiting -= 1
                                 break
                             else:
                                 # if the traffic light is green, the car will move
@@ -432,75 +508,98 @@ class Car(Agent):
                 # check if there is a car in the next position or at the right of the next position, so see the current position and the next to see what is going to be the right
                 # the right of the next position should have priority so return true if there is a car in the right of the next position
                 # to find the right of the next position, we need to see the current position and the next position, build a vector to find the direction of the movement, ot then see whats on the right
-                vector = (nextmove[0]-self.agent.x, nextmove[1]-self.agent.y)
-                newxplus= nextmove[0]+1
-                newyplus= nextmove[1]+1
-                newxminus= nextmove[0]-1
-                newyminus= nextmove[1]-1
+                vector = (nextmove[0] - self.agent.x, nextmove[1] - self.agent.y)
+                newxplus = nextmove[0] + 1
+                newyplus = nextmove[1] + 1
+                newxminus = nextmove[0] - 1
+                newyminus = nextmove[1] - 1
 
-                if vector == (0,1):
+                if vector == (0, 1):
                     # going up (down visually)
-                    if (newxminus<0): return False
-                    if self.map.IsThereCar(nextmove[0]-1, nextmove[1]) is not False:
+                    if (newxminus < 0): return False
+                    if self.map.IsThereCar(nextmove[0] - 1, nextmove[1]) is not False:
                         return True
-                elif vector == (0,-1):
+                elif vector == (0, -1):
                     # going down (up visually)
-                    if (newxplus>=SIZE): return False
-                    if self.map.IsThereCar(nextmove[0]+1, nextmove[1]) is not False:
+                    if (newxplus >= SIZE): return False
+                    if self.map.IsThereCar(nextmove[0] + 1, nextmove[1]) is not False:
                         return True
-                elif vector == (1,0):
+                elif vector == (1, 0):
                     # going right
-                    if (newyplus>=SIZE): return False
-                    if self.map.IsThereCar(nextmove[0], nextmove[1]+1) is not False:
+                    if (newyplus >= SIZE): return False
+                    if self.map.IsThereCar(nextmove[0], nextmove[1] + 1) is not False:
                         return True
-                elif vector == (-1,0):
+                elif vector == (-1, 0):
                     # going left
-                    if (newyminus<0): return False
-                    if self.map.IsThereCar(nextmove[0], nextmove[1]-1) is not False:
+                    if (newyminus < 0): return False
+                    if self.map.IsThereCar(nextmove[0], nextmove[1] - 1) is not False:
                         return True        
                 if self.map.IsThereCar(nextmove[0], nextmove[1]) is not False:
                     return True
                 return False
+            
+
             async def run(self):
-                waiting_time=0
+                waiting_time = 0
                 while True:
-                    nextmove=self.travel()
+                    nextmove = self.travel()
                     if nextmove is not None:
                         is_there_traffic_light = self.IsThereTrafficLight(nextmove)
                         if is_there_traffic_light is not None and is_there_traffic_light['isThere'] is not True or is_there_traffic_light is None:
-                            if self.map.IsThereCar(nextmove[0], nextmove[1]) is not True:
+                            if self.map.IsThereCar(nextmove[0], nextmove[1]) == False:
+                                waiting_time = 0
                                 if self.IsThereCarRight(nextmove) is not True:
-                                    pastx=self.agent.x
-                                    pasty=self.agent.y
-                                    waiting_time=0
+                                    pastx = self.agent.x
+                                    pasty = self.agent.y
                                     self.move(nextmove[0], nextmove[1])
-                                    #print(f"___________presente {self.x, self.y}_____________")
                                     self.map.update_vehicles(pastx, pasty, 0)
+                                    await asyncio.sleep(1)
+                                    continue
                                 else:
                                     #print(f"Car {self.car_id} is waiting for the car(s) passing by")
                                     await asyncio.sleep(1)
                                     continue
                             else:
+                                waiting_time += 1
+                                carAhead = self.map.IsThereCar(nextmove[0], nextmove[1])
+                                #print(f"Car {self.agent.car_id} is waiting for the car {carAhead} to move")
+                                await self.reporting_waiting_time(waiting_time, carAhead)
                                 #print(f"Car {self.car_id} is waiting for the car in front to move")
                                 await asyncio.sleep(1)
                                 continue
                         elif is_there_traffic_light is not None and is_there_traffic_light['isThere'] is True:
                             #print(f"Car {self.car_id} is waiting for the traffic light to change")
-                            waiting_time+=1
+                            waiting_time += 1
                             await self.reporting_waiting_time(waiting_time, is_there_traffic_light['id'])
                             await asyncio.sleep(1)
                             continue
                     else:
-                        print("No road finded, car is waiting")
+                        print(f"No road finded, car {self.agent.car_id} is waiting")
                         await asyncio.sleep(1)
                         continue
-                    await asyncio.sleep(1)
-                    
+
+            async def receiveMessage(self):
+                msg = await self.receive(timeout = 0.01) # wait for a message for 10 seconds
+                if msg:
+                    #print(f"{self.agent.car_id} received a message with content: {msg.body} from {msg.sender}")
+                    mensagem = eval(msg.body)
+                    return mensagem
+                else:
+                    #print(f"{self.agent.car_id} Did not received any message after 10 seconds")
+                    return None
+                
             async def reporting_waiting_time(self, waiting_time, agentDestination):
-                msg = Message(to=agentDestination, sender=self.car_id)
+                msg = Message(to = agentDestination, sender = self.car_id)
+                previous_cars = await self.receiveMessage()
+                if previous_cars is not None:
+                    previous_cars.append(waiting_time)
+                else:
+                    previous_cars = []
+                    previous_cars.append(waiting_time)
+                    
                 msg.set_metadata("performative", "inform")
-                msg.body = str(waiting_time)
-                #print(str(msg.sender) + " ->->->->->->->->-> " + str(msg.to) + "   Body: " + str(msg.body) +  " seconds")
+                msg.body = str(previous_cars)
+                #print(str(msg.sender) + " ->->->->->->->->-> " + str(msg.to) + "   Body: " + str(msg.body))
                 # Check if the agent is properly initialized and connected to the message transport system
                 await self.send(msg)
                 #print ("sent")
@@ -513,10 +612,6 @@ class Car(Agent):
         # call the async def run function
         await self.behaviours[0].run()
 
-            
-
-
-
 
 class RoadSign:
     def __init__(self, sign_type):
@@ -528,7 +623,7 @@ class Lane:
         self.lane_id = lane_id
         self.cars = []
         self.lane = []
-        self.map=Map()
+        self.map = Map()
 
     def add_car(self, car):
         self.cars.append(car)
@@ -553,20 +648,14 @@ class Road:
     def __init__(self, name, num_lanes):
         self.name = name
         self.lanes = [Lane(i) for i in range(num_lanes)]
-        self.map=Map()
+        self.map = Map()
 
     def add_lane(self, lane):
         self.lanes.append(lane)
-    
-    
-
-
 
 
 class Environment:
     def __init__(self):
-
-
         road_1 = Road("Road_1", 2)  # 2 lanes
         road_2 = Road("Road_2", 2)  # 2 lanes
         road_3 = Road("Road_3", 2)
@@ -608,8 +697,8 @@ class Environment:
         road_3.add_lane(lane5)
         road_3.add_lane(lane6)
         
-        intersection_1 = Intersection("Intersection_1@localhost", road_1, road_2,None,None, (5,5,6, 6), (6, 7, 6,7))
-        intersection_2 = Intersection("Intersection_2@localhost", road_2, road_3,None,None, (12,12,13,13), (6,7,6,7))
+        intersection_1 = Intersection("Intersection_1@localhost", road_1, road_2, None, None, (5,5,6, 6), (6, 7, 6,7))
+        intersection_2 = Intersection("Intersection_2@localhost", road_2, road_3, None, None, (12,12,13,13), (6,7,6,7))
 
         # data structures to keep the data related to the environment
         self.roads = [road_1, road_2, road_3, road_4]
@@ -623,9 +712,9 @@ class Environment:
         #trafficLight3 = TrafficLight(3, intersection_1, 'Red', 'Intermitent', road_2, 6, 8)
         trafficLight4 = TrafficLight("TLAgent-4@localhost", intersection_1, 'Red', 'Intermitent', road_2, 5, 5)
 
-        trafficLight5 = TrafficLight("TLAgent-5@localhost", intersection_1, 'Red', 'Intermitent', road_2, 11, 7)
-        trafficLight6 = TrafficLight("TLAgent-6@localhost", intersection_1, 'Green', 'Intermitent', road_3, 13, 8)
-        trafficLight7 = TrafficLight("TLAgent-7@localhost", intersection_1, 'Green', 'Intermitent', road_3, 12, 5)
+        trafficLight5 = TrafficLight("TLAgent-5@localhost", intersection_2, 'Red', 'Intermitent', road_2, 11, 7)
+        trafficLight6 = TrafficLight("TLAgent-6@localhost", intersection_2, 'Green', 'Intermitent', road_3, 13, 8)
+        trafficLight7 = TrafficLight("TLAgent-7@localhost", intersection_2, 'Green', 'Intermitent', road_3, 12, 5)
 
         intersection_1.add_tlight(trafficLight1)
         intersection_1.add_tlight(trafficLight2)
@@ -639,21 +728,23 @@ class Environment:
         self.traffic_lights = [trafficLight1, trafficLight2, trafficLight4, trafficLight5, trafficLight6, trafficLight7]
 
         self.car2 = Car("Vehicle-2@localhost", 2, 1)
-        self.car3= Car("Vehicle-3@localhost", 5, 4)
+        self.car3= Car("Vehicle-3@localhost", 5, 3)
         self.car1 = Car("Vehicle-1@localhost", 0, 0)
 
         self.cars = [self.car1, self.car2, self.car3]
 
-        self.map=Map()
+        self.map = Map()
 
         
     def add_road(self, road):
         self.roads.append(road)
 
+
     def add_intersection(self, intersection):
         self.intersections.append(intersection)
 
-    # displays the environment.
+
+    # displays the environment
     def display(self):
         for road in self.roads:
             print(f"{road.name}: ", end='')
@@ -675,22 +766,9 @@ if __name__ == "__main__":
 
     async def main():
         simulation_task = asyncio.create_task(env.map.draw_map())
-        #intersection_task1 = asyncio.create_task(env.intersections[0].run())
-        #intersection_task2 = asyncio.create_task(env.intersections[1].run())
-        #car_task2 = asyncio.create_task(env.car2.run())
-        #car_task3 = asyncio.create_task(env.car3.run())
-        #car_task1 = asyncio.create_task(env.car1.run())
-
-        #await env.car1.start()
-        #env.car1.start.web.start(hostname="localhost", port="10000")
-        #await env.car2.start()
-        #await env.car3.start()
-        
-
 
         await asyncio.gather(*[ agent.start() for agent in env.cars ],*[tlight.start() for tlight in env.traffic_lights],*[intersection.start() for intersection in env.intersections], simulation_task)
 
         await spade.wait_until_finished(*[ agent for agent in env.cars ])
-        #await asyncio.gather(intersection_task1, intersection_task2, simulation_task)
 
     spade.run(main())
