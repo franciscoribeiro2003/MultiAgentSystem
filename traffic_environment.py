@@ -103,47 +103,6 @@ class Map:
                         break
             return lanes
 
-
-    # def route_greedy(self, current_x, current_y, to_x, to_y):
-    #     visited = set()
-    #     path = []
-    #     nextmove = self.WhatsNextLane(current_x, current_y)
-    #     better_distance = self.ManhattanDistance(current_x, current_y, to_x, to_y)
-    #     better_x = current_x
-    #     better_y = current_y
-    #     count = 0
-        
-    #     while better_x != to_x and better_y != to_y:
-    #         if nextmove is not None:
-    #             for i in range(len(nextmove)):
-    #                 if (current_x, current_y) not in visited:
-    #                     visited.add((current_x, current_y))
-    #                     if nextmove[i] is not None:
-    #                         distance = self.ManhattanDistance(nextmove[i][0], nextmove[i][1], to_x, to_y)
-    #                         if nextmove[i][0] == to_x and nextmove[i][1] == to_y:
-    #                             path.append((nextmove[i][0], nextmove[i][1]))
-    #                             return path
-    #                         elif distance <= better_distance:
-    #                             better_distance = distance
-    #                             better_x = nextmove[i][0]
-    #                             better_y = nextmove[i][1]
-    #                             count += 1
-    #                             print(1)
-    #             if count == 0:
-    #                 path.append((nextmove[0][0], nextmove[0][1]))
-    #                 current_x = nextmove[0][0]
-    #                 current_y = nextmove[0][1]
-    #                 nextmove = self.WhatsNextLane(current_x, current_y)
-                    
-    #             else:
-    #                 path.append((better_x, better_y))
-    #                 nextmove = self.WhatsNextLane(current_x, current_y)
-    #                 better_distance = self.ManhattanDistance(current_x, current_y, to_x, to_y)
-    #                 current_x = better_x
-    #                 current_y = better_y
-    #             count = 0
-                
-    #     return path
     
     
     def route_greedy(self, from_x, from_y, to_x, to_y):
@@ -173,7 +132,7 @@ class Map:
                 return self.CalcularCusto(to_x, to_y) >= other.CalcularCusto(to_x, to_y)
             
             def __ne__(self, other):
-                return self.CalcularCusto(to_x, to_y) != other.CalcularCusto(to_x, to_y)
+                return self.position != other.position
             
             def __repr__(self):
                 return f"{self.position} - g: {self.CalcularCusto(to_x, to_y)}"
@@ -196,25 +155,27 @@ class Map:
                 current = current.return_parent()
             path = path[::-1]
             for i in range(len(path)):
-                result.append(path[i].position)
+                result.append(path[i])
+            print(result)
             return result
         
-        q = PriorityQueue()
-        visited = set()
 
         def search(start, end):
+            q = PriorityQueue()
+            visited = set()
             no = Node(self, None, start)
             q.put(no)
 
             while not q.empty():
                 atual= q.get()
+                #print (atual.position)
                 if atual.position == end:
                     return return_path(atual)
                 if atual.position not in visited:
                     nextmoves = self.WhatsNextLane(atual.position[0], atual.position[1])
                     if nextmoves is not None:
                         for i in range(len(nextmoves)):
-                            if nextmoves[i] is not None:
+                            if nextmoves[i] is not None and nextmoves[i] not in visited:
                                 no = Node(self, atual, nextmoves[i])
                                 q.put(no)
 
@@ -222,7 +183,7 @@ class Map:
             
     
     def ManhattanDistance(self, from_x, from_y, to_x, to_y):
-        # calculate the manhattan distance from the car to the destination
+        # calculate the manhattan distance from the car to the destination 
         return abs(from_x - to_x) + abs(from_y - to_y)
     
 
@@ -884,25 +845,30 @@ class EmergencyVehicle(Agent):
             while True:
                 if flag == 0:
                     x, y = self.agent.emergency_call()
-                    print ("planning route")
-                    route = self.agent.map.route_greedy(self.agent.x, self.agent.y, x, y)
-                    print ("planning complete")
-                    await self.send_route(route)
-                    flag = 1
-                for i in range(len(route)):
-                    newx = route[i][0]
-                    newy = route[i][1]
-                    print (f"new x = {newx} and new y = {newy}")
-                    if self.agent.map.IsThereCar(newx, newy) is False and self.agent.map.isThereEmergency(newx, newy) is False and self.agent.isThereCarRight(route[i]) is False:
-                        print (f"Emergency Vehicle {self.agent.id} is moving to {newx}, {newy}")
-                        self.agent.move(newx, newy)
-                        print (f"Emergency Vehicle {self.agent.id} is now at {self.agent.x}, {self.agent.y}")
-                        await asyncio.sleep(1)
-                        continue
-                    else:
-                        await asyncio.sleep(1)
-                        continue
-                flag = 0                        
+                    print ( f"Emergency at {x}, {y}. Emergency Vehicle {self.agent.id} dispatched")
+                    if x is not None and y is not None:
+                        print ("planning route")
+                        route = []
+                        route = self.agent.map.route_greedy(self.agent.x, self.agent.y, x, y)
+                        print ("planning complete")
+                        flag = 1
+                        await self.send_route(route)
+                    x, y = None, None
+                if flag == 1:
+                    for i in range(len(route)):
+                        newx = route[i][0]
+                        newy = route[i][1]
+                        #print (f"new x = {newx} and new y = {newy}")
+                        if self.agent.map.IsThereCar(newx, newy) is False and self.agent.map.isThereEmergency(newx, newy) is False and self.agent.isThereCarRight(route[i]) is False:
+                            #print (f"Emergency Vehicle {self.agent.id} is moving to {newx}, {newy}")
+                            self.agent.move(newx, newy)
+                            #print (f"Emergency Vehicle {self.agent.id} is now at {self.agent.x}, {self.agent.y}")
+                            await asyncio.sleep(0.5)
+                            continue
+                        else:
+                            await asyncio.sleep(1)
+                            continue
+                    flag = 0                        
                 print (f"Emergency Vehicle {self.agent.id} arrived at the destination to help")
                 await asyncio.sleep(1)
 
