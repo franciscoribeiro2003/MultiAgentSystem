@@ -31,4 +31,19 @@ do
     echo -e "$password\n$password" | prosodyctl adduser "$username"
 done
 
+for i in {1..2}
+do
+    username="EmergencyVehicle-$i@localhost"
+    echo "Adding user: $username"
+
+    # Use prosodyctl command to add the user and provide password
+    echo -e "$password\n$password" | prosodyctl adduser "$username"
+done
+
+username="CentralControl@localhost"
+echo "Adding user: $username"
+
+# Use prosodyctl command to add the user and provide password
+echo -e "$password\n$password" | prosodyctl adduser "$username"
+
 echo "User creation completed."
