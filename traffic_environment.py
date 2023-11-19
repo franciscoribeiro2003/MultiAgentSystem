@@ -172,6 +172,7 @@ class Map:
                 if atual.position == end:
                     return return_path(atual)
                 if atual.position not in visited:
+                    visited.add(atual.position)
                     nextmoves = self.WhatsNextLane(atual.position[0], atual.position[1])
                     if nextmoves is not None:
                         for i in range(len(nextmoves)):
@@ -274,11 +275,12 @@ class Map:
                                 break
                         pygame.draw.rect(screen, traffic_light_colors[color], (draw_x, draw_y, cell_size, cell_size))
 
+                    if emergency_grid[x][y] is not None and emergency_grid[x][y]==1:
+                        pygame.draw.rect(screen, Emergency_color, (draw_x, draw_y, cell_size, cell_size))
+                        
                     if vehicles_grid[x][y] is not None and vehicles_grid[x][y] != 0:
                         pygame.draw.ellipse(screen, car, (draw_x, draw_y, cell_size, cell_size))
                     
-                    if emergency_grid[x][y] is not None and emergency_grid[x][y]==1:
-                        pygame.draw.rect(screen, Emergency_color, (draw_x, draw_y, cell_size, cell_size))
                     
                     if emergency_grid[x][y] is not None and emergency_grid[x][y] != 0 and emergency_grid[x][y] != 1:
                         pygame.draw.ellipse(screen, Emergency_vehicle_grid_color, (draw_x, draw_y, cell_size, cell_size))
@@ -855,7 +857,14 @@ class EmergencyVehicle(Agent):
                         await self.send_route(route)
                     x, y = None, None
                 if flag == 1:
-                    for i in range(len(route)):
+                    pen=0
+                    i = 1
+                    while i < len(route):
+                        print (f"i {i}")
+                        if pen==1:
+                            pen=0
+                            i-=1
+                            print (f"i pen {i}")
                         newx = route[i][0]
                         newy = route[i][1]
                         #print (f"new x = {newx} and new y = {newy}")
@@ -864,10 +873,11 @@ class EmergencyVehicle(Agent):
                             self.agent.move(newx, newy)
                             #print (f"Emergency Vehicle {self.agent.id} is now at {self.agent.x}, {self.agent.y}")
                             await asyncio.sleep(0.5)
-                            continue
                         else:
                             await asyncio.sleep(1)
-                            continue
+                            pen=1
+                            print (f"ok i pen {i}")
+                        i+=1
                     flag = 0                        
                 print (f"Emergency Vehicle {self.agent.id} arrived at the destination to help")
                 await asyncio.sleep(1)
