@@ -2,6 +2,7 @@ from gettext import find
 from hmac import new
 import random
 import time
+from typing import Optional
 from spade.agent import Agent
 from spade.behaviour import CyclicBehaviour
 from spade.message import Message
@@ -322,7 +323,7 @@ class TrafficLight(Agent):
         async def receiveMessage(self):
             msg = await self.receive(timeout = 0.01) 
             if msg:
-                print(f"{self.agent.id} received the message with content: {msg.body} from {msg.sender}")
+                print(f"Traffic light {self.agent.id} received the message with content: {msg.body} from {msg.sender}")
                 waiting_times = eval(msg.body)
                 return waiting_times
             else:
@@ -345,7 +346,8 @@ class TrafficLight(Agent):
                 score={'points': 0, 'car_platoon': 0}
                 if waiting_times is not None:
                     score = self.agent.heuristic(waiting_times)
-                if (self.agent.get_color() == 'Red'): await self.send_score(score)
+                if (self.agent.get_color() == 'Red' or self.agent.get_color() == 'Yellow'): 
+                    await self.send_score(score)
                 '''
                 waiting_times = await self.receiveMessage()
                 score={'points': 0, 'car_platoon': 0}
@@ -580,6 +582,8 @@ class Intersection(Agent):
             while True:
                 await self.receiveMessage()
                 await self.receiveMessage()
+                await self.receiveMessage()
+                await self.receiveMessage()
                 if (time > 0):
                     time -= 1
                     self.agent.clear_scores()
@@ -777,7 +781,20 @@ class EmergencyVehicle(Agent):
         self.y = y
         self.map.update_emergency(self.x, self.y, self.id)
 
-      
+
+    def IsThereTrafficLight(self, nextmove):
+        if self.map.IsThereTrafficLight(nextmove[0], nextmove[1]) is not False:
+            # check if there is a traffic light in the next position
+            tl_id = self.map.IsThereTrafficLight(nextmove[0], nextmove[1])
+            for tl in env.traffic_lights:
+                if tl.id == tl_id:
+                    if tl.get_color() == 'Red':
+                        return True
+                    elif tl.get_color() == 'Yellow':
+                        return True
+                    else:
+                        return False
+
     def isThereCarRight(self, nextmove):
         vector = (nextmove[0] - self.x, nextmove[1] - self.y)
         newxplus = nextmove[0] + 1
@@ -840,16 +857,25 @@ class EmergencyVehicle(Agent):
             #print(f"Sending route to {receiver} from {self.agent.id}")
             await self.send(msg)
 
+        async def send_position(self):
+            receiver = str(self.central_control)
+            msg = Message(to = receiver , sender = self.agent.id)
+            msg.set_metadata("performative", "inform")
+            msg.body = str((self.agent.x, self.agent.y))
+            #print(f"Sending position to {receiver} from {self.agent.id}")
+            await self.send(msg)
+
 
         async def run(self):
             flag = 0
             route = []
             while True:
+                await asyncio.sleep(0.5)
                 if flag == 0:
                     x, y = self.agent.emergency_call()
                     print ( f"Emergency at {x}, {y}. Emergency Vehicle {self.agent.id} dispatched")
                     if x is not None and y is not None:
-                        print ("planning route")
+                        print (f"planning route to {x}, {y}")
                         route = []
                         route = self.agent.map.route_greedy(self.agent.x, self.agent.y, x, y)
                         print ("planning complete")
@@ -860,23 +886,24 @@ class EmergencyVehicle(Agent):
                     pen=0
                     i = 1
                     while i < len(route):
-                        print (f"i {i}")
                         if pen==1:
                             pen=0
                             i-=1
-                            print (f"i pen {i}")
                         newx = route[i][0]
                         newy = route[i][1]
-                        #print (f"new x = {newx} and new y = {newy}")
-                        if self.agent.map.IsThereCar(newx, newy) is False and self.agent.map.isThereEmergency(newx, newy) is False and self.agent.isThereCarRight(route[i]) is False:
-                            #print (f"Emergency Vehicle {self.agent.id} is moving to {newx}, {newy}")
+                        if (i+1) < len(route):
+                            nextPosition = (route[i][0], route[i][1])
+                            tlightahead = not self.agent.IsThereTrafficLight(nextPosition)
+                        else :
+                            tlightahead = True
+                        if self.agent.map.IsThereCar(newx, newy) is False and self.agent.map.isThereEmergency(newx, newy) is False and self.agent.isThereCarRight(route[i]) is False and tlightahead is True:
                             self.agent.move(newx, newy)
-                            #print (f"Emergency Vehicle {self.agent.id} is now at {self.agent.x}, {self.agent.y}")
+                            await self.send_position()
                             await asyncio.sleep(0.5)
                         else:
+                            await self.send_position()
                             await asyncio.sleep(1)
                             pen=1
-                            print (f"ok i pen {i}")
                         i+=1
                     flag = 0                        
                 print (f"Emergency Vehicle {self.agent.id} arrived at the destination to help")
@@ -907,17 +934,28 @@ class CentralControl(Agent):
         async def receiveMessage(self):
             msg = await self.receive(timeout = 0.1)
             if msg:
-                print(f"{self.agent.id} received a message with content: {msg.body} from {msg.sender}")
+                print(f"Central Control {self.agent.id} received a message with content: {msg.body} from {msg.sender}")
                 mensagem = eval(msg.body)
                 return mensagem
             else:
                 return None
 
+        async def receive_position(self):
+            msg = await self.receive(timeout = 0.1)
+            if msg:
+                print(f"Central Control {self.agent.id} received a message with content: {msg.body} from {msg.sender}")
+                mensagem = eval(msg.body)
+                return mensagem
+            else:
+                return None
 
-        async def alert_TLight(self, tlight):
+        async def alert_TLight(self, tlight, distance):
             msg = Message(to = tlight, sender = self.agent.id)
             msg.set_metadata("performative", "inform")
-            msg.body = str([100, 100, 100, 100, 100, 100, 100])
+            toSend = [100, 100, 100, 100] # default with 4 cars meaning 8 seconds to keep the light green
+            for i in range(distance):
+                toSend[0]+=100 # 100 points in case there is another emergency vehicle in the same road and valorize the emergency vehicle that is closer to the intersection
+            msg.body = str(toSend)
             await self.send(msg)
 
 
@@ -925,20 +963,34 @@ class CentralControl(Agent):
             while True:
                 route = await self.receiveMessage()
                 if route is not None:
-                    pass
-                    '''
-                    for i in range(len(route)):
-                        j = i
-                        print(f"i = {i} and j = {j}")
-                        while (j < 7 and j < len(route) - 1):
-                            print(f"j = {j}")
-                            if self.agent.map.IsThereTrafficLight(route[j][0], route[j][1]) is not False:
-                                tlight = self.agent.map.IsThereTrafficLight(route[j][0], route[j][1])
-                                await self.alert_TLight(tlight)
-                                break
-                            j += 1
-                        '''
-                await asyncio.sleep(1)
+                    i = 1
+                    while i < len(route):
+                        if isinstance(route[i], (list, tuple)) and len(route[i]) >= 2:
+                            x = route[i][0]
+                            y = route[i][1]
+                            # receive the position from the emergency vehicle and see if the emergency vehicle is close to a traffic light
+                            position = await self.receive_position()
+                            if self.agent.map.IsThereTrafficLight(x, y) is not None:
+                                if position is not None:
+                                    if position[0] == x and position[1] == y:
+                                        i+=1
+                                        continue
+                                    # distance equals the number of indices between the emergency vehicle and the traffic light, so find the index of the traffic light in the route minus the position of the emergency vehicle
+                                    distance =  route.index((x, y)) - route.index(position)
+                                    # if the distance is equals 8 or less, the emergency vehicle is close to the traffic light, so alert the traffic light
+                                    if distance <= 8:
+                                        tl_id = self.agent.map.IsThereTrafficLight(x, y)
+                                        if tl_id is not None:
+                                            await self.alert_TLight(tl_id, 8-distance)
+                                # if there is a traffic light in the next position, alert the traffic light 
+                                    await asyncio.sleep(0.5)
+                                    continue
+                                continue
+                                #print(f" --------- Central Control {self.agent.id} found a traffic light {tl_id} at {x}, {y}")
+                            i += 1
+                        else:
+                            break
+                await asyncio.sleep(0.4)
                     
 
 
@@ -1097,6 +1149,7 @@ class Environment:
 
         self.traffic_lights = [trafficLight1, trafficLight2, trafficLight3, trafficLight4, trafficLight5, trafficLight6, trafficLight7, trafficLight8, trafficLight9, trafficLight10, trafficLight11, trafficLight12, trafficLight13, trafficLight14, trafficLight15, trafficLight16]
 
+        
         self.car1 = Car("Vehicle-1@localhost", 0, 0)
         self.car2 = Car("Vehicle-2@localhost", 2, 1)
         self.car3 = Car("Vehicle-3@localhost", 5, 4)
@@ -1119,10 +1172,10 @@ class Environment:
         self.car20 = Car("Vehicle-20@localhost", 27, 12)
 
         self.cars = [self.car1, self.car2, self.car3, self.car4, self.car5, self.car6, self.car7, self.car8, self.car9, self.car10,self.car11, self.car12, self.car13, self.car14, self.car15, self.car16, self.car17, self.car18, self.car19, self.car20]
-
+        
         self.central_control = CentralControl("CentralControl@localhost")
 
-        self.emergency1 = EmergencyVehicle("EmergencyVehicle-1@localhost", 18, 11)
+        self.emergency1 = EmergencyVehicle("EmergencyVehicle-1@localhost", 18,11)
         #self.emergency2 = EmergencyVehicle("EmergencyVehicle-2@localhost",9, 6)
 
         self.emergency_vehicles = [self.emergency1]
