@@ -2,7 +2,6 @@ from gettext import find
 from hmac import new
 import random
 import time
-from typing import Optional
 from spade.agent import Agent
 from spade.behaviour import CyclicBehaviour
 from spade.message import Message
@@ -10,7 +9,7 @@ import asyncio
 import spade
 import pygame
 from queue import PriorityQueue
-from queue import Queue
+from collections import defaultdict
 
 # Seed the random number generator with the current system time
 random.seed(time.time())
@@ -22,7 +21,7 @@ vehicles_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
 lanes_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
 intersections_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
 emergency_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
-
+message_dict = defaultdict(list)
 
 
 class Map:
@@ -192,7 +191,9 @@ class Map:
     async def draw_map(self):
         pygame.init()
         # auto = pygame.display.Info().current_w, pygame.display.Info().current_h
-        screen_width, screen_height = 500, 500
+        screen_width, screen_height = 1100, 700
+        CHAT_WIDTH, CHAT_HEIGHT = 400, screen_height
+        GAME_WIDTH, GAME_HEIGHT = screen_width - CHAT_WIDTH, screen_height
         screen = pygame.display.set_mode((screen_width, screen_height), pygame.RESIZABLE)
         pygame.display.set_caption('Traffic Simulation')
 
@@ -210,6 +211,11 @@ class Map:
             'Red': (255, 0, 0),
             'Intermitent': (255, 165, 0)  # Orange for Intermitent
         }
+
+        font = pygame.font.SysFont('Arial', 16)
+        font2 = pygame.font.SysFont('Arial', 12)
+        font_color = (0,0,0)
+
 
         running = True
         dragging = False
@@ -253,9 +259,8 @@ class Map:
 
             screen.fill(greenback)
 
-
             # Draw grid with zoom and offset
-            cell_size = int(screen_width // (SIZE * env.zoom_level))
+            cell_size = int(GAME_WIDTH // (SIZE * env.zoom_level))
             for x in range(SIZE):
                 for y in range(SIZE):
                     draw_x = int((x * cell_size) - env.offset_x)
@@ -263,7 +268,6 @@ class Map:
 
                     if lanes_grid[x][y] is not None:
                         pygame.draw.rect(screen, lane_color, (draw_x, draw_y, cell_size, cell_size))
-
                     if intersections_grid[x][y] is not None:
                         pygame.draw.rect(screen, intersection_color, (draw_x, draw_y, cell_size, cell_size))
 
@@ -285,7 +289,26 @@ class Map:
                     
                     if emergency_grid[x][y] is not None and emergency_grid[x][y] != 0 and emergency_grid[x][y] != 1:
                         pygame.draw.ellipse(screen, Emergency_vehicle_grid_color, (draw_x, draw_y, cell_size, cell_size))
-                    
+
+            
+            # fill the chat with white
+            pygame.draw.rect(screen, (255, 255, 255), (GAME_WIDTH, 0, CHAT_WIDTH, CHAT_HEIGHT))
+
+            
+            # Draw the agents
+            y = 10
+            for agent in message_dict:
+                text = font.render(agent, True, (0, 0, 0))
+                screen.blit(text, (GAME_WIDTH + 10, y))
+                y += 26
+                for message in message_dict[agent]:
+                    if message != '' or message is not None:
+                        text = font2.render(message, True, (0, 0, 0))
+                        screen.blit(text, (GAME_WIDTH + 30, y))
+                        y += 26
+
+                       
+   
             pygame.display.flip()
             await asyncio.sleep(0.1)
 
@@ -324,6 +347,8 @@ class TrafficLight(Agent):
             msg = await self.receive(timeout = 0.01) 
             if msg:
                 print(f"Traffic light {self.agent.id} received the message with content: {msg.body} from {msg.sender}")
+                message_dict[str(self.agent.id).lower()]=[]
+                message_dict[str(self.agent.id).lower()].append(msg.body) 
                 waiting_times = eval(msg.body)
                 return waiting_times
             else:
@@ -544,7 +569,8 @@ class Intersection(Agent):
             msg = await self.receive(timeout = 0.01)
             if msg:
                 print(f"{self.agent.id} receive message from {msg.sender} with content: {msg.body} --")
-                scores={'sender': msg.sender, 'body': eval(msg.body)}
+                message_dict[str(self.agent.id).lower()].append(msg.body)
+                scores = {'sender': msg.sender, 'body': eval(msg.body)}
                 await self.arrange_scores(scores)
             else:
                 pass
@@ -580,6 +606,8 @@ class Intersection(Agent):
         async def run(self):
             time = 0 
             while True:
+                if time==0:
+                    message_dict[str(self.agent.id).lower()]=[]
                 await self.receiveMessage()
                 await self.receiveMessage()
                 await self.receiveMessage()
@@ -739,7 +767,9 @@ class Car(Agent):
             async def receiveMessage(self):
                 msg = await self.receive(timeout = 0.01) 
                 if msg:
-                    #print(f"{self.agent.car_id} received a message with content: {msg.body} from {msg.sender}")
+                    print(f"{self.agent.car_id} received a message with content: {msg.body} from {msg.sender}")
+                    message_dict[str(self.agent.car_id).lower()]=[]
+                    message_dict[str(self.agent.car_id).lower()].append(msg.body)
                     mensagem = eval(msg.body)
                     return mensagem
                 else:
@@ -935,6 +965,8 @@ class CentralControl(Agent):
             msg = await self.receive(timeout = 0.1)
             if msg:
                 print(f"Central Control {self.agent.id} received a message with content: {msg.body} from {msg.sender}")
+                message_dict[str(self.agent.id).lower()]=[]
+                message_dict[str(self.agent.id).lower()].append(msg.body)
                 mensagem = eval(msg.body)
                 return mensagem
             else:
@@ -944,6 +976,8 @@ class CentralControl(Agent):
             msg = await self.receive(timeout = 0.1)
             if msg:
                 print(f"Central Control {self.agent.id} received a message with content: {msg.body} from {msg.sender}")
+                message_dict[str(self.agent.id).lower()]=[]
+                message_dict[str(self.agent.id).lower()].append(msg.body)
                 mensagem = eval(msg.body)
                 return mensagem
             else:
@@ -976,7 +1010,11 @@ class CentralControl(Agent):
                                         i+=1
                                         continue
                                     # distance equals the number of indices between the emergency vehicle and the traffic light, so find the index of the traffic light in the route minus the position of the emergency vehicle
-                                    distance =  route.index((x, y)) - route.index(position)
+                                    try:
+                                        distance =  route.index((x, y)) - route.index(position)
+                                    except ValueError:
+                                        print(f"Position {position} not found in route")
+                                        distance = 8
                                     # if the distance is equals 8 or less, the emergency vehicle is close to the traffic light, so alert the traffic light
                                     if distance <= 8:
                                         tl_id = self.agent.map.IsThereTrafficLight(x, y)
@@ -1055,7 +1093,8 @@ class Environment:
         lane3 = Lane(3)
         lane4 = Lane(4)
         lane5 = Lane(5)
-        lane6 = Lane(6)
+        lane6 = Lane(6)        #  *[ agent.start() for agent in env.cars ],
+
         lane7 = Lane(7)
         lane8 = Lane(8)
         lane9 = Lane(9)
@@ -1183,11 +1222,29 @@ class Environment:
 
         self.map = Map()
 
+        self.create_message()
+
 
     def zoom_in(self):
         self.zoom_level *= 1.1
 
 
+    def create_message(self):
+        message_dict[str(self.central_control.id).lower()].append('')
+        
+        for intersection in self.intersections:
+            message_dict[str(intersection.id).lower()].append('')
+
+        for tlight in self.traffic_lights:
+            message_dict[str(tlight.id).lower()].append('')
+
+        for car in self.cars:
+            message_dict[str(car.car_id).lower()].append('')
+        
+        for emergency in self.emergency_vehicles:
+            message_dict[str(emergency.id).lower()].append('')
+            
+    
     def zoom_out(self):
         self.zoom_level /= 1.1
 
