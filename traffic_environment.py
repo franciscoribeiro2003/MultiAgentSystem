@@ -1,5 +1,3 @@
-from gettext import find
-from hmac import new
 import random
 import time
 from spade.agent import Agent
@@ -90,7 +88,6 @@ class Map:
     def WhatsNextLane(self, x,y):
         # display the movements avaible for the car, so if it is in the intersection display the lanes that the car can go, if it is in the lane display the next lane
         # use spade to get the position of the car and sent him the next avaible positions so he can go to
-
         if lanes_grid[x][y] is not None:
             # if the car is in a lane
             # get the next position from the lane id
@@ -102,7 +99,6 @@ class Map:
                         lanes.append(env.lanes[i].next_position(x,y))
                         break
             return lanes
-
     
     
     def route_greedy(self, from_x, from_y, to_x, to_y):
@@ -116,36 +112,48 @@ class Map:
             def __eq__(self, other):
                 return self.position == other.position
             
+
             def CalcularCusto(self, to_x, to_y):
                 return self.greedy.ManhattanDistance(self.position[0], self.position[1], to_x, to_y)
             
+
             def __lt__(self, other):
+            
                 return self.CalcularCusto(to_x, to_y) < other.CalcularCusto(to_x, to_y)
             
+
             def __gt__(self, other):
                 return self.CalcularCusto(to_x, to_y) > other.CalcularCusto(to_x, to_y)
             
+
             def __le__(self, other):
                 return self.CalcularCusto(to_x, to_y) <= other.CalcularCusto(to_x, to_y)
             
+
             def __ge__(self, other):
                 return self.CalcularCusto(to_x, to_y) >= other.CalcularCusto(to_x, to_y)
             
+
             def __ne__(self, other):
                 return self.position != other.position
             
+
             def __repr__(self):
                 return f"{self.position} - g: {self.CalcularCusto(to_x, to_y)}"
+            
             
             def __str__(self):
                 return f"{self.position} - g: {self.CalcularCusto(to_x, to_y)}"
             
+
             def __hash__(self):
                 return hash(self.position)
             
+
             def return_parent(self):
                 return self.parent
-            
+
+
         def return_path(current_node):
             path = []
             result = []
@@ -181,7 +189,7 @@ class Map:
                                 q.put(no)
 
         return search((from_x, from_y), (to_x, to_y))
-            
+     
     
     def ManhattanDistance(self, from_x, from_y, to_x, to_y):
         # calculate the manhattan distance from the car to the destination 
@@ -202,8 +210,12 @@ class Map:
         null_color = (0, 0, 0)  # Black
         car = (255, 255, 255)  
         greenback = (0, 200, 100)  # Green background
-        Emergency_vehicle_grid_color = (40, 40, 200)
+        Emergency_vehicle_grid_color_blue = (0, 0, 255)  # Blue
+        Emergency_vehicle_grid_color_red = (255, 0, 0)  # Red
         Emergency_color = (255, 165, 0)
+
+        RED = (255, 0, 0)
+        BLACK = (0, 0, 0)
 
         traffic_light_colors = {
             'Green': (60, 255, 60),
@@ -214,36 +226,59 @@ class Map:
 
         font = pygame.font.SysFont('Arial', 16)
         font2 = pygame.font.SysFont('Arial', 12)
+        font_heading = pygame.font.SysFont('Arial', 23, True)
         font_color = (0,0,0)
 
-
+        chat_scroll = 0
         running = True
         dragging = False
         prev_mouse_pos = None
         last_click_time = 0
         double_click_threshold = 500
 
+        siren = 0
+        screen = pygame.display.set_mode((screen_width, screen_height), pygame.RESIZABLE | pygame.SCALED)
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+
+                elif event.type == pygame.VIDEORESIZE:
+                    # The window has been resized, so update the screen dimensions
+                    screen_width, screen_height = event.w, event.h
+                    GAME_WIDTH, GAME_HEIGHT = screen_width - CHAT_WIDTH, screen_height
+                    # Recreate the screen surface with the new dimensions
+                    screen = pygame.display.set_mode((screen_width, screen_height), pygame.RESIZABLE)
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_PLUS or event.key == pygame.K_KP_PLUS:
                         env.zoom_in()
                     elif event.key == pygame.K_MINUS or event.key == pygame.K_KP_MINUS:
                         env.zoom_out()
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:  # Left mouse button
-                        if pygame.time.get_ticks() - last_click_time < double_click_threshold:
-                            env.zoom_in()  # Double click zoom in
-                        else:
-                            dragging = True
-                            prev_mouse_pos = pygame.mouse.get_pos()
+                    # Get the mouse position
+                    mouse_pos = pygame.mouse.get_pos()
+                    # Check if the mouse is over the chat area
+                    if GAME_WIDTH < mouse_pos[0] < screen_width:
+                        # The mouse is over the chat area
+                        if event.button == 4:  # Scroll wheel up
+                            # Scroll up through the chat messages
+                            chat_scroll = max(chat_scroll - 1, 0)
+                        elif event.button == 5:  # Scroll wheel down
+                            # Scroll down through the chat messages
+                            chat_scroll += 1
+                    else:
+                        if event.button == 1:  # Left mouse button
+                            if pygame.time.get_ticks() - last_click_time < double_click_threshold:
+                                env.zoom_in()  # Double click zoom in
+                            else:
+                                dragging = True
+                                prev_mouse_pos = pygame.mouse.get_pos()
                         last_click_time = pygame.time.get_ticks()
-                    elif event.button == 4:  # Scroll wheel up
-                        env.zoom_out()
-                    elif event.button == 5:  # Scroll wheel down
-                        env.zoom_in()
+                        # The mouse is over the game area
+                        if event.button == 4:  # Scroll wheel up
+                            env.zoom_out()
+                        elif event.button == 5:  # Scroll wheel down
+                            env.zoom_in()
                 elif event.type == pygame.MOUSEBUTTONUP:
                     if event.button == 1:  # Left mouse button
                         dragging = False
@@ -284,31 +319,67 @@ class Map:
                         pygame.draw.rect(screen, Emergency_color, (draw_x, draw_y, cell_size, cell_size))
                         
                     if vehicles_grid[x][y] is not None and vehicles_grid[x][y] != 0:
-                        pygame.draw.ellipse(screen, car, (draw_x, draw_y, cell_size, cell_size))
+                        pygame.draw.ellipse(screen, car, (draw_x+2, draw_y+2, cell_size-5, cell_size-5))
                     
                     
                     if emergency_grid[x][y] is not None and emergency_grid[x][y] != 0 and emergency_grid[x][y] != 1:
-                        pygame.draw.ellipse(screen, Emergency_vehicle_grid_color, (draw_x, draw_y, cell_size, cell_size))
-
+                        if siren == 0:
+                            pygame.draw.ellipse(screen, Emergency_vehicle_grid_color_blue, (draw_x, draw_y, cell_size, cell_size))
+                            siren = 1
+                        else:
+                            pygame.draw.ellipse(screen, RED, (draw_x, draw_y, cell_size, cell_size))
+                            siren = 0
             
             # fill the chat with white
-            pygame.draw.rect(screen, (255, 255, 255), (GAME_WIDTH, 0, CHAT_WIDTH, CHAT_HEIGHT))
+            pygame.draw.rect(screen, (255, 255, 255), (GAME_WIDTH, 0, CHAT_WIDTH, screen_height))
 
-            
-            # Draw the agents
+            #fill the header if the chat with grey
+            pygame.draw.rect(screen, (100, 100, 100), (GAME_WIDTH, 0, CHAT_WIDTH, 40))
+
+            # draw a line to seperate the chat header from the chat messages with 3 of width
+            pygame.draw.line(screen, (0, 0, 0), (GAME_WIDTH, 40), (GAME_WIDTH + CHAT_WIDTH, 40), 3)
+
+            # draw a line to separete the chat from the game with 3 of width
+            pygame.draw.line(screen, (0, 0, 0), (GAME_WIDTH, 0), (GAME_WIDTH, GAME_HEIGHT), 3)
+
             y = 10
+            current_scroll = chat_scroll
+            text = font_heading.render("Inbox of Agents", True, (255,255,255))
+            screen.blit(text, (GAME_WIDTH + 40, y))
+            y+= 45
+            # Draw the agents
             for agent in message_dict:
+                # Skip the messages that are above the current scroll position
+                if current_scroll > 0:
+                    current_scroll -= 1
+                    continue
                 text = font.render(agent, True, (0, 0, 0))
-                screen.blit(text, (GAME_WIDTH + 10, y))
+                screen.blit(text, (GAME_WIDTH + 30, y))
+
+                # Draw the icon
+                if agent.startswith("tlagent"):
+                    pygame.draw.rect(screen, RED, pygame.Rect(GAME_WIDTH + 10, y, 10, 10))
+                elif agent.startswith("vehicle"):
+                    pygame.draw.circle(screen, BLACK, (GAME_WIDTH + 10 , y), 5)
+                elif agent.startswith("emergencyvehicle"):
+                    pygame.draw.circle(screen,Emergency_vehicle_grid_color_blue , (GAME_WIDTH + 10 , y), 8)
+                elif agent.startswith("intersection"):
+                    pygame.draw.rect(screen, BLACK, pygame.Rect(GAME_WIDTH + 10 , y, 10, 10))
+                elif agent.startswith("centralcontrol"):
+                    pygame.draw.rect(screen,Emergency_color, pygame.Rect(GAME_WIDTH + 10 , y, 10, 10))
+
                 y += 26
+
                 for message in message_dict[agent]:
+                    # Skip the messages that are above the current scroll position
+                    if current_scroll > 0:
+                        current_scroll -= 1
+                        continue
                     if message != '' or message is not None:
                         text = font2.render(message, True, (0, 0, 0))
-                        screen.blit(text, (GAME_WIDTH + 30, y))
+                        screen.blit(text, (GAME_WIDTH + 50, y))
                         y += 26
-
                        
-   
             pygame.display.flip()
             await asyncio.sleep(0.1)
 
@@ -347,8 +418,8 @@ class TrafficLight(Agent):
             msg = await self.receive(timeout = 0.01) 
             if msg:
                 print(f"Traffic light {self.agent.id} received the message with content: {msg.body} from {msg.sender}")
-                message_dict[str(self.agent.id).lower()]=[]
-                message_dict[str(self.agent.id).lower()].append(msg.body) 
+                message_dict[str(self.agent.id).lower()] = []
+                message_dict[str(self.agent.id).lower()].append(f"{msg.body} from {msg.sender}") 
                 waiting_times = eval(msg.body)
                 return waiting_times
             else:
@@ -356,7 +427,7 @@ class TrafficLight(Agent):
 
 
         async def send_score(self, score):
-            receiver=self.agent.intersection.id
+            receiver = self.agent.intersection.id
             msg = Message(to = receiver , sender = self.agent.id) 
             msg.set_metadata("performative", "inform")
             msg.body = str(score)
@@ -569,7 +640,7 @@ class Intersection(Agent):
             msg = await self.receive(timeout = 0.01)
             if msg:
                 print(f"{self.agent.id} receive message from {msg.sender} with content: {msg.body} --")
-                message_dict[str(self.agent.id).lower()].append(msg.body)
+                message_dict[str(self.agent.id).lower()].append(f"{msg.body} from {msg.sender}")
                 scores = {'sender': msg.sender, 'body': eval(msg.body)}
                 await self.arrange_scores(scores)
             else:
@@ -606,7 +677,7 @@ class Intersection(Agent):
         async def run(self):
             time = 0 
             while True:
-                if time==0:
+                if time == 0:
                     message_dict[str(self.agent.id).lower()]=[]
                 await self.receiveMessage()
                 await self.receiveMessage()
@@ -764,12 +835,13 @@ class Car(Agent):
                         await asyncio.sleep(1)
                         continue
 
+
             async def receiveMessage(self):
                 msg = await self.receive(timeout = 0.01) 
                 if msg:
                     print(f"{self.agent.car_id} received a message with content: {msg.body} from {msg.sender}")
                     message_dict[str(self.agent.car_id).lower()]=[]
-                    message_dict[str(self.agent.car_id).lower()].append(msg.body)
+                    message_dict[str(self.agent.car_id).lower()].append(f"{msg.body} from {msg.sender}")
                     mensagem = eval(msg.body)
                     return mensagem
                 else:
@@ -784,7 +856,7 @@ class Car(Agent):
                 else:
                     previous_cars = []
                     previous_cars.append(waiting_time)
-                    
+
                 msg.set_metadata("performative", "inform")
                 msg.body = str(previous_cars)
                 #print(str(msg.sender) + " ->->->->->->->->-> " + str(msg.to) + "   Body: " + str(msg.body))
@@ -825,6 +897,7 @@ class EmergencyVehicle(Agent):
                     else:
                         return False
 
+
     def isThereCarRight(self, nextmove):
         vector = (nextmove[0] - self.x, nextmove[1] - self.y)
         newxplus = nextmove[0] + 1
@@ -856,6 +929,7 @@ class EmergencyVehicle(Agent):
             return True
         return False
     
+
     def emergency_call(self):
         x = random.randint(0, SIZE-1)
         y = random.randint(0, SIZE-1)
@@ -886,6 +960,7 @@ class EmergencyVehicle(Agent):
             msg.body = str(route)
             #print(f"Sending route to {receiver} from {self.agent.id}")
             await self.send(msg)
+
 
         async def send_position(self):
             receiver = str(self.central_control)
@@ -947,7 +1022,6 @@ class CentralControl(Agent):
         self.id = id
         self.map = Map()
   
-  
 
     async def setup(self):
         b = self.CentralControlInteraction(self)
@@ -964,24 +1038,26 @@ class CentralControl(Agent):
         async def receiveMessage(self):
             msg = await self.receive(timeout = 0.1)
             if msg:
-                print(f"Central Control {self.agent.id} received a message with content: {msg.body} from {msg.sender}")
-                message_dict[str(self.agent.id).lower()]=[]
-                message_dict[str(self.agent.id).lower()].append(msg.body)
+                print(f"Central Control {self.agent.id} received a message with content: {msg.body}")
+                message_dict[str(self.agent.id).lower()] = []
+                message_dict[str(self.agent.id).lower()].append(f"{msg.body} from {msg.sender}")
                 mensagem = eval(msg.body)
                 return mensagem
             else:
                 return None
 
+
         async def receive_position(self):
             msg = await self.receive(timeout = 0.1)
             if msg:
                 print(f"Central Control {self.agent.id} received a message with content: {msg.body} from {msg.sender}")
-                message_dict[str(self.agent.id).lower()]=[]
-                message_dict[str(self.agent.id).lower()].append(msg.body)
+                message_dict[str(self.agent.id).lower()] = []
+                message_dict[str(self.agent.id).lower()].append(f"{msg.body} from {msg.sender}")
                 mensagem = eval(msg.body)
                 return mensagem
             else:
                 return None
+
 
         async def alert_TLight(self, tlight, distance):
             msg = Message(to = tlight, sender = self.agent.id)
@@ -1007,7 +1083,7 @@ class CentralControl(Agent):
                             if self.agent.map.IsThereTrafficLight(x, y) is not None:
                                 if position is not None:
                                     if position[0] == x and position[1] == y:
-                                        i+=1
+                                        i += 1
                                         continue
                                     # distance equals the number of indices between the emergency vehicle and the traffic light, so find the index of the traffic light in the route minus the position of the emergency vehicle
                                     try:
@@ -1019,7 +1095,8 @@ class CentralControl(Agent):
                                     if distance <= 8:
                                         tl_id = self.agent.map.IsThereTrafficLight(x, y)
                                         if tl_id is not None:
-                                            await self.alert_TLight(tl_id, 8-distance)
+                                            await self.alert_TLight(tl_id, 8 - distance)
+                                    
                                 # if there is a traffic light in the next position, alert the traffic light 
                                     await asyncio.sleep(0.5)
                                     continue
@@ -1188,7 +1265,6 @@ class Environment:
 
         self.traffic_lights = [trafficLight1, trafficLight2, trafficLight3, trafficLight4, trafficLight5, trafficLight6, trafficLight7, trafficLight8, trafficLight9, trafficLight10, trafficLight11, trafficLight12, trafficLight13, trafficLight14, trafficLight15, trafficLight16]
 
-        
         self.car1 = Car("Vehicle-1@localhost", 0, 0)
         self.car2 = Car("Vehicle-2@localhost", 2, 1)
         self.car3 = Car("Vehicle-3@localhost", 5, 4)
@@ -1215,10 +1291,8 @@ class Environment:
         self.central_control = CentralControl("CentralControl@localhost")
 
         self.emergency1 = EmergencyVehicle("EmergencyVehicle-1@localhost", 18,11)
-        #self.emergency2 = EmergencyVehicle("EmergencyVehicle-2@localhost",9, 6)
 
         self.emergency_vehicles = [self.emergency1]
-        #self.emergency_vehicles = [self.emergency1, self.emergency2]
 
         self.map = Map()
 
