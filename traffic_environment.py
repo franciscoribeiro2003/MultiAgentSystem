@@ -1,98 +1,110 @@
-import random
-import time
-from spade.agent import Agent
-from spade.behaviour import CyclicBehaviour
-from spade.message import Message
-import asyncio
-import spade
-import pygame
-from queue import PriorityQueue
-from collections import defaultdict
+# Importação de bibliotecas necessárias
+import random                               # Biblioteca para geração de números aleatórios
+import time                                 # Biblioteca para manipulação de tempo
+from spade.agent import Agent               # Módulo para criação de agentes no SPADE
+from spade.behaviour import CyclicBehaviour # Módulo para comportamentos cíclicos no SPADE
+from spade.message import Message           # Módulo para manipulação de mensagens no SPADE
+import asyncio                              # Biblioteca para programação assíncrona em Python
+import spade                                # Biblioteca SPADE para desenvolvimento de sistemas multiagentes
+import pygame                               # Biblioteca para a interface gráfica do projeto
+from queue import PriorityQueue             # Implementação de uma fila de prioridade em Python
+from collections import defaultdict         # Implementação de um dicionário padrão em Python (defaultdict)
 
 # Seed the random number generator with the current system time
 random.seed(time.time())
 
-SIZE = 30
+# Inicialização de constantes e estruturas de dados
+SIZE = 30  # Tamanho do mapa
+traffic_lights_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]    # Grade para armazenar informações sobre semáforos
+vehicles_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]          # Grade para armazenar informações sobre veículos
+lanes_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]             # Grade para armazenar informações sobre faixas de tráfego
+intersections_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]     # Grade para armazenar informações sobre interseções
+emergency_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]         # Grade para armazenar informações sobre situações de emergência
 
-traffic_lights_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
-vehicles_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
-lanes_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
-intersections_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
-emergency_grid = [[None for _ in range(SIZE)] for _ in range(SIZE)]
-message_dict = defaultdict(list)
+message_dict = defaultdict(list) # Dicionário padrão para armazenar listas de mensagens associadas a ids
 
+analise_times = []  # Lista para armazenar tempos de espera para análise de estatísticas
+clock = 1           # Variável para contar o tempo
+media_max=[]         # Lisra para armazenar a média máxima de espera
 
 class Map:
     def __init__(self):
+        # Inicializa os atributos do mapa
         self.zoom_level = 1
         self.offset_x = 0
         self.offset_y = 0
-        self.zoom_level = 1.0
+        self.previous_media = 0
+        self.maxTimeMedia = 0
 
 
     def zoom_in(self):
+        # Aumenta o zoom do mapa no display pygame
         self.zoom_level *= 1.2
 
 
     def zoom_out(self):
+        # Diminui o zoom do mapa no display pygame
         self.zoom_level /= 1.2
 
 
     def pan(self, dx, dy):
+        # Move o mapa no display pygame com o rato
         self.offset_x += dx
         self.offset_y += dy
 
 
     def update_traffic_lights(self, x, y, info):
+        # Atualiza as luzes de trânsito na posição (x, y) com as informações fornecidas
         traffic_lights_grid[x][y] = info
 
 
     def update_vehicles(self, x, y, info):
+        # Atualiza os veículos na posição (x, y) com as informações fornecidas
         vehicles_grid[x][y] = info
 
 
     def update_lanes(self, x, y, info):
+        # Método para atualizar as faixas na posição (x, y) com a informação dada
         if lanes_grid[x][y] is None:
             lanes_grid[x][y] = []
         lanes_grid[x][y].append(info)
 
 
     def update_intersections(self, x, y, info):
+        # Método para atualizar as interseções na posição (x, y) com a informação dada
         intersections_grid[x][y] = info
 
 
     def update_emergency(self, x, y, info):
+        # Método para atualizar situações de emergência na posição (x, y) com a informação dada
         emergency_grid[x][y] = info    
 
 
     def IsThereTrafficLight(self, x, y):
-        # check if there is a traffic light in the position
+        # Método para verificar se há um semáforo na posição (x, y)
         if traffic_lights_grid[x][y] is not None or traffic_lights_grid[x][y] != 0:
             return traffic_lights_grid[x][y]
         return False
 
 
     def IsThereCar(self, x, y):
-        # check if there is a car in the position
+        # Método para verificar se há um carro na posição (x, y)
         if vehicles_grid[x][y] is None or vehicles_grid[x][y]  == 0:
             return False
         return vehicles_grid[x][y]
     
     
     def isThereEmergency(self, x, y):
+        # Método para verificar se há uma situação de emergência na posição (x, y)
         if emergency_grid[x][y] is None or emergency_grid[x][y] == 0 or emergency_grid[x][y] == 1:
             return False
         return emergency_grid[x][y]
 
 
-    def WhatsNextLane(self, x,y):
-        # display the movements avaible for the car, so if it is in the intersection display the lanes that the car can go, if it is in the lane display the next lane
-        # use spade to get the position of the car and sent him the next avaible positions so he can go to
+    def WhatsNextLane(self, x, y):
+        # Método para mostrar os movimentos disponíveis para o carro na posição (x, y)
         if lanes_grid[x][y] is not None:
-            # if the car is in a lane
-            # get the next position from the lane id
             lanes = []
-            # get all the ids of the lanes_grid and then acess that lanes by id and get the next position or positions
             for i in range(len(env.lanes)):
                 for k in range(len(lanes_grid[x][y])):
                     if env.lanes[i].lane_id == lanes_grid[x][y][k]:
@@ -102,7 +114,9 @@ class Map:
     
     
     def route_greedy(self, from_x, from_y, to_x, to_y):
+        # Método para encontrar o caminho mais eficiente pelo algoritmo greedy para o veículo de emergência
         class Node:
+            # Classe interna para representar um nó na busca do caminho
             def __init__(self, greedy, parent, position):
                 self.parent = parent
                 self.position = position
@@ -114,6 +128,7 @@ class Map:
             
 
             def CalcularCusto(self, to_x, to_y):
+                # Calcula o custo (distância de Manhattan) do nó até o ponto de destino
                 return self.greedy.ManhattanDistance(self.position[0], self.position[1], to_x, to_y)
             
 
@@ -155,6 +170,7 @@ class Map:
 
 
         def return_path(current_node):
+            # Retorna o caminho a ser percorrido pelo veículo de emergência
             path = []
             result = []
             current = current_node
@@ -169,54 +185,85 @@ class Map:
         
 
         def search(start, end):
-            q = PriorityQueue()
-            visited = set()
-            no = Node(self, None, start)
-            q.put(no)
+            # Método de busca para encontrar o caminho mais eficiente pelo meio de uma fila de prioridade
+            q = PriorityQueue()             # Cria uma fila de prioridade para armazenar os nós a serem explorados
+            visited = set()                 # Conjunto para rastrear nós já visitados durante a busca
+            no = Node(self, None, start)    # Cria o nó de origem
+            q.put(no)                       # Adiciona o nó de origem à fila de prioridade
 
             while not q.empty():
-                atual= q.get()
-                #print (atual.position)
-                if atual.position == end:
+                atual = q.get()                                                         # Obtém o nó com menor custo da fila de prioridade
+                if atual.position == end:                                               # Se o nó atual atingir o destino, retorna o caminho percorrido
                     return return_path(atual)
                 if atual.position not in visited:
-                    visited.add(atual.position)
-                    nextmoves = self.WhatsNextLane(atual.position[0], atual.position[1])
+                    visited.add(atual.position)                                          # Marca o nó atual como visitado
+                    nextmoves = self.WhatsNextLane(atual.position[0], atual.position[1]) # Obtém os movimentos disponíveis
                     if nextmoves is not None:
                         for i in range(len(nextmoves)):
                             if nextmoves[i] is not None and nextmoves[i] not in visited:
-                                no = Node(self, atual, nextmoves[i])
-                                q.put(no)
+                                no = Node(self, atual, nextmoves[i])                     # Cria um novo nó para o próximo movimento
+                                q.put(no)                                                # Adiciona o novo nó à fila de prioridade para explorar
 
-        return search((from_x, from_y), (to_x, to_y))
+        return search((from_x, from_y), (to_x, to_y)) # Inicia a busca com os pontos de origem e destino
      
     
     def ManhattanDistance(self, from_x, from_y, to_x, to_y):
-        # calculate the manhattan distance from the car to the destination 
+        # Calcula a distância de Manhattan entre dois pontos
         return abs(from_x - to_x) + abs(from_y - to_y)
     
 
+    async def statiscs(self):
+        # Atualiza estatísticas periodicamente (a cada segundo)
+        global analise_times
+        global clock
+        global media_max
+        while True:
+            maximo=0
+            for element in analise_times:
+                if element>maximo:
+                    maximo=element
+            if maximo>0:
+                media_max.append(maximo) # Adiciona o valor máximo de tempos de espera à lista
+                
+            for max in media_max:
+                if max == 0:
+                    media_max.remove(max)
+                self.maxTimeMedia+=max # Soma os valores máximos de tempos de espera
+            
+            if len(media_max) > 0:
+                self.maxTimeMedia = self.maxTimeMedia / len(media_max) # Calcula a média dos valores máximos de tempos de espera
+
+
+            media = float(len(analise_times) / len(env.cars))
+            # media igual ao anterior a dividir por dois
+            if self.previous_media != 0:
+                # Calcula a média ponderada considerando o valor anterior
+                media = (media / clock) + (self.previous_media *  (clock - 1)  / clock )
+            self.previous_media = media
+            analise_times = []
+            clock += 1
+            await asyncio.sleep(1)
+
     async def draw_map(self):
+        # Inicializa e atualiza a interface gráfica do ambiente
         pygame.init()
-        # auto = pygame.display.Info().current_w, pygame.display.Info().current_h
         screen_width, screen_height = 1100, 700
-        CHAT_WIDTH, CHAT_HEIGHT = 400, screen_height
+        CHAT_WIDTH, _ = 400, screen_height
         GAME_WIDTH, GAME_HEIGHT = screen_width - CHAT_WIDTH, screen_height
         screen = pygame.display.set_mode((screen_width, screen_height), pygame.RESIZABLE)
         pygame.display.set_caption('Traffic Simulation')
 
-        lane_color = (70, 70, 70)  # Gray
-        intersection_color = (50, 50, 50)  # Dark Gray
-        null_color = (0, 0, 0)  # Black
-        car = (255, 255, 255)  
-        greenback = (0, 200, 100)  # Green background
-        Emergency_vehicle_grid_color_blue = (0, 0, 255)  # Blue
-        Emergency_vehicle_grid_color_red = (255, 0, 0)  # Red
-        Emergency_color = (255, 165, 0)
+        # Definição das cores utilizadas
+        lane_color = (70, 70, 70)                       # Gray
+        intersection_color = (50, 50, 50)               # Dark Gray
+        car = (255, 255, 255)                           # White
+        greenback = (0, 200, 100)                       # Green background
+        Emergency_vehicle_grid_color_blue = (0, 0, 255) # Blue
+        Emergency_color = (255, 165, 0)                 # Orange
+        RED = (255, 0, 0)                               # Red
+        BLACK = (0, 0, 0)                               # Black
 
-        RED = (255, 0, 0)
-        BLACK = (0, 0, 0)
-
+        # Cores dos semáforos
         traffic_light_colors = {
             'Green': (60, 255, 60),
             'Yellow': (255, 255, 0),
@@ -224,10 +271,11 @@ class Map:
             'Intermitent': (255, 165, 0)  # Orange for Intermitent
         }
 
+        # Configuração das fontes e cores de texto
         font = pygame.font.SysFont('Arial', 16)
+        font1 = pygame.font.SysFont('Arial', 14)
         font2 = pygame.font.SysFont('Arial', 12)
         font_heading = pygame.font.SysFont('Arial', 23, True)
-        font_color = (0,0,0)
 
         chat_scroll = 0
         running = True
@@ -238,62 +286,66 @@ class Map:
 
         siren = 0
         while running:
+            # Lida com eventos do pygame
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
 
                 elif event.type == pygame.VIDEORESIZE:
-                    # The window has been resized, so update the screen dimensions
+                    # Atualiza as dimensões da janela do pygame
                     screen_width, screen_height = event.w, event.h
                     GAME_WIDTH, GAME_HEIGHT = screen_width - CHAT_WIDTH, screen_height
-                    # Recreate the screen surface with the new dimensions
+                    # Atualiza o display do pygame
                     screen = pygame.display.set_mode((screen_width, screen_height), pygame.RESIZABLE)
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_PLUS or event.key == pygame.K_KP_PLUS:
-                        env.zoom_in()
+                        env.zoom_in()  # Zoom in
                     elif event.key == pygame.K_MINUS or event.key == pygame.K_KP_MINUS:
-                        env.zoom_out()
+                        env.zoom_out() # Zoom out
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    # Get the mouse position
-                    mouse_pos = pygame.mouse.get_pos()
-                    # Check if the mouse is over the chat area
+                    # Lida com eventos de clique do rato
+                    mouse_pos = pygame.mouse.get_pos() # Posição do rato
                     if GAME_WIDTH < mouse_pos[0] < screen_width:
-                        # The mouse is over the chat area
-                        if event.button == 4:  # Scroll wheel up
-                            # Scroll up through the chat messages
+                        # Se o clique for na área do chat
+                        if event.button == 4:
+                            # Scroll da comunicação dos agentes para cima
                             chat_scroll = max(chat_scroll - 1, 0)
-                        elif event.button == 5:  # Scroll wheel down
-                            # Scroll down through the chat messages
+                        elif event.button == 5:
+                            # Scroll da comunicação dos agentes para baixo
                             chat_scroll += 1
                     else:
-                        if event.button == 1:  # Left mouse button
+                        if event.button == 1:
+                            # Clique esquerdo
                             if pygame.time.get_ticks() - last_click_time < double_click_threshold:
-                                env.zoom_in()  # Double click zoom in
+                                env.zoom_in()
                             else:
                                 dragging = True
                                 prev_mouse_pos = pygame.mouse.get_pos()
                         last_click_time = pygame.time.get_ticks()
-                        # The mouse is over the game area
-                        if event.button == 4:  # Scroll wheel up
+                        # Zoom in e zoom out com o scroll do rato
+                        if event.button == 4:
+                            # Scroll up
                             env.zoom_out()
-                        elif event.button == 5:  # Scroll wheel down
+                        elif event.button == 5:
+                            # Scroll down
                             env.zoom_in()
                 elif event.type == pygame.MOUSEBUTTONUP:
-                    if event.button == 1:  # Left mouse button
+                    if event.button == 1:
                         dragging = False
                         prev_mouse_pos = None
 
+            # Lógica de deslocamento e zoom do ambiente
             if dragging:
                 new_mouse_pos = pygame.mouse.get_pos()
                 if prev_mouse_pos is not None:
-                    delta_x = prev_mouse_pos[0] - new_mouse_pos[0]  # Invert the direction
-                    delta_y = prev_mouse_pos[1] - new_mouse_pos[1]  # Invert the direction
+                    delta_x = prev_mouse_pos[0] - new_mouse_pos[0] 
+                    delta_y = prev_mouse_pos[1] - new_mouse_pos[1]
                     env.pan(delta_x, delta_y)
                 prev_mouse_pos = new_mouse_pos
 
             screen.fill(greenback)
 
-            # Draw grid with zoom and offset
+            # Desenha o display com o zoom e deslocamento
             cell_size = int(GAME_WIDTH // (SIZE * env.zoom_level))
             for x in range(SIZE):
                 for y in range(SIZE):
@@ -308,20 +360,21 @@ class Map:
                     if traffic_lights_grid[x][y] is not None:
                         tl_id = traffic_lights_grid[x][y]
                         color = 'Red'
-                        for tl in env.traffic_lights:
+                        for tl in env.traffic_lights:   # Procura o semáforo com o id correspondente
                             if tl.id == tl_id:
-                                color = tl.get_color()
+                                color = tl.get_color()  # Obtém a cor do semáforo
                                 break
-                        pygame.draw.rect(screen, traffic_light_colors[color], (draw_x, draw_y, cell_size, cell_size))
+                        pygame.draw.rect(screen, traffic_light_colors[color], (draw_x, draw_y, cell_size, cell_size)) # Desenha o semáforo com a cor correspondente
 
-                    if emergency_grid[x][y] is not None and emergency_grid[x][y]==1:
-                        pygame.draw.rect(screen, Emergency_color, (draw_x, draw_y, cell_size, cell_size))
+                    if emergency_grid[x][y] is not None and emergency_grid[x][y] == 1: 
+                        pygame.draw.rect(screen, Emergency_color, (draw_x, draw_y, cell_size, cell_size)) # Desenha o local de socorrimento
                         
                     if vehicles_grid[x][y] is not None and vehicles_grid[x][y] != 0:
-                        pygame.draw.ellipse(screen, car, (draw_x+2, draw_y+2, cell_size-5, cell_size-5))
+                        pygame.draw.ellipse(screen, car, (draw_x+2, draw_y+2, cell_size-5, cell_size-5)) # Desenha o veículo
                     
                     
                     if emergency_grid[x][y] is not None and emergency_grid[x][y] != 0 and emergency_grid[x][y] != 1:
+                        # Desenha o veículo de emergência a piscar azul e vermelho
                         if siren == 0:
                             pygame.draw.ellipse(screen, Emergency_vehicle_grid_color_blue, (draw_x, draw_y, cell_size, cell_size))
                             siren = 1
@@ -329,16 +382,16 @@ class Map:
                             pygame.draw.ellipse(screen, RED, (draw_x, draw_y, cell_size, cell_size))
                             siren = 0
             
-            # fill the chat with white
+            # Desenha a área do chat
             pygame.draw.rect(screen, (255, 255, 255), (GAME_WIDTH, 0, CHAT_WIDTH, screen_height))
 
-            #fill the header if the chat with grey
+            # Desenha o cabeçalho do chat
             pygame.draw.rect(screen, (100, 100, 100), (GAME_WIDTH, 0, CHAT_WIDTH, 40))
 
-            # draw a line to seperate the chat header from the chat messages with 3 of width
+            # Desenha a linha divisória entre o cabeçalho do chat e o corpo do chat
             pygame.draw.line(screen, (0, 0, 0), (GAME_WIDTH, 40), (GAME_WIDTH + CHAT_WIDTH, 40), 3)
 
-            # draw a line to separete the chat from the game with 3 of width
+            # Desenha a linha divisória entre o mapa e o chat
             pygame.draw.line(screen, (0, 0, 0), (GAME_WIDTH, 0), (GAME_WIDTH, GAME_HEIGHT), 3)
 
             y = 10
@@ -346,16 +399,15 @@ class Map:
             text = font_heading.render("Inbox of Agents", True, (255,255,255))
             screen.blit(text, (GAME_WIDTH + 40, y))
             y+= 45
-            # Draw the agents
+            # Desenha as mensagens recebidas pelos agentes
             for agent in message_dict:
-                # Skip the messages that are above the current scroll position
                 if current_scroll > 0:
                     current_scroll -= 1
                     continue
                 text = font.render(agent, True, (0, 0, 0))
                 screen.blit(text, (GAME_WIDTH + 30, y))
 
-                # Draw the icon
+                # Desenha o icone do agente
                 if agent.startswith("tlagent"):
                     pygame.draw.rect(screen, RED, pygame.Rect(GAME_WIDTH + 10, y, 10, 10))
                 elif agent.startswith("vehicle"):
@@ -370,7 +422,6 @@ class Map:
                 y += 26
 
                 for message in message_dict[agent]:
-                    # Skip the messages that are above the current scroll position
                     if current_scroll > 0:
                         current_scroll -= 1
                         continue
@@ -378,7 +429,33 @@ class Map:
                         text = font2.render(message, True, (0, 0, 0))
                         screen.blit(text, (GAME_WIDTH + 50, y))
                         y += 26
-                       
+            
+            # Desenha a linha divisória na posicao y
+            pygame.draw.line(screen, (0, 0, 0), (GAME_WIDTH, y), (GAME_WIDTH + CHAT_WIDTH, y), 3)
+
+            # Desenha o cabeçalho das estatísticas
+            pygame.draw.rect(screen, (200, 200, 200), (GAME_WIDTH, y, CHAT_WIDTH, screen_height))
+            y += 15
+
+            # Desenha a linha divisória entre o chat e as estatísticas
+            pygame.draw.line(screen, (0, 0, 0), (GAME_WIDTH, 0), (GAME_WIDTH, GAME_HEIGHT), 3)
+
+            text = font_heading.render("Statistics", True, (0, 0, 0))
+            screen.blit(text, (GAME_WIDTH + 10, y))
+            y += 34
+            text = font1.render(f"Average time stopped by a traffic light: {format(self.previous_media, '.3f')} s", True, (0, 0, 0))
+            screen.blit(text, (GAME_WIDTH + 20, y))
+            y += 26
+            global analise_times
+            text = font1.render(f"Waiting times of a vehicle(s) by a traffic light: {analise_times}", True, (0, 0, 0))
+            screen.blit(text, (GAME_WIDTH + 20, y))
+            y += 26
+            text = font1.render(f"Maximum average time stopped by a traffic light: {format(self.maxTimeMedia, '.3f')} s", True, (0, 0, 0))
+            screen.blit(text, (GAME_WIDTH + 20, y))
+            y += 26
+            text = font1.render(f"Number of seconds since the beggining: {clock}", True, (0, 0, 0))
+            screen.blit(text, (GAME_WIDTH + 20, y))
+
             pygame.display.flip()
             await asyncio.sleep(0.1)
 
@@ -387,6 +464,7 @@ class Map:
 
 
 class TrafficLight(Agent):
+    # Inicialização do agente semáforo
     def __init__(self, id, intersection, colorfront, colorleft, road, cordX, cordY):
         Agent.__init__(self, id, "password")
         self.id = id
@@ -401,6 +479,7 @@ class TrafficLight(Agent):
 
 
     async def setup(self):
+        # Configuração inicial do agente TrafficLight
         b = self.TrafficLight(self, self.map)
         self.add_behaviour(b)
         await self.behaviours[0].run()
@@ -414,6 +493,7 @@ class TrafficLight(Agent):
 
 
         async def receiveMessage(self):
+            # Método para receber mensagens
             msg = await self.receive(timeout = 0.01) 
             if msg:
                 print(f"Traffic light {self.agent.id} received the message with content: {msg.body} from {msg.sender}")
@@ -426,16 +506,17 @@ class TrafficLight(Agent):
 
 
         async def send_score(self, score):
+            # Método para enviar pontuações para a interseção
             receiver = self.agent.intersection.id
             msg = Message(to = receiver , sender = self.agent.id) 
             msg.set_metadata("performative", "inform")
             msg.body = str(score)
-
-            #print(f"Sending score to {receiver} from {self.agent.id}")
+            # print(f"Sending score to {receiver} from {self.agent.id}")
             await self.send(msg)
 
 
         async def run(self):
+            # Método principal do comportamento cíclico do semáforo
             while True:
                 waiting_times = await self.receiveMessage()
                 score={'points': 0, 'car_platoon': 0}
@@ -443,33 +524,29 @@ class TrafficLight(Agent):
                     score = self.agent.heuristic(waiting_times)
                 if (self.agent.get_color() == 'Red' or self.agent.get_color() == 'Yellow'): 
                     await self.send_score(score)
-                '''
-                waiting_times = await self.receiveMessage()
-                score={'points': 0, 'car_platoon': 0}
-                if waiting_times is not None:
-                    score = self.agent.heuristic(waiting_times)
-                if (self.agent.get_color() == 'Red'): await self.send_score(score)
-                '''
                 await asyncio.sleep(1)
 
 
     def heuristic(self, waiting_times):
+        # Função de heurística para calcular pontuações com base nos tempos de espera dos veículos
         points = 0
         sum = 0
         length = len(waiting_times)
         for i in range(len(waiting_times)):
-            sum += waiting_times[i]
-        points = (3 * length) + (1 * sum)
-        reactiontime=2*length
+            sum += waiting_times[i]       # Soma dos tempos de espera
+        points = (3 * length) + (1 * sum) # Pontuação com base na soma dos tempos de espera e com um peso maior no número de veículos
+        reactiontime = 2 * length         # Tempo de reação com base no número de veículos
         return {'points': points, 'car_platoon': reactiontime}
         
 
     def change(self, new_colorfront, new_colorleft):
+        # Método para alterar as cores do semáforo
         self.colorfront = new_colorfront
         self.colorleft = new_colorleft
 
 
     def asking_to_change(self, waiting_time):
+        # Método para decidir se o semáforo deve mudar com base no tempo de espera
         if self.colorfront == "Red":
             if waiting_time >= 4:
                 self.waiting = True
@@ -479,6 +556,7 @@ class TrafficLight(Agent):
         
 
     def get_color(self):
+        # Método para obter a cor atual do semáforo
         if self.colorfront == "Green":
             return "Green"
         elif self.colorfront == "Yellow":
@@ -489,6 +567,7 @@ class TrafficLight(Agent):
 
 
 class Intersection(Agent):
+    # Inicialização do agente interseção
     def __init__(self, name, road1, road2, road3, road4, x, y):
         Agent.__init__(self, name, "password")
         self.id = name
@@ -496,8 +575,9 @@ class Intersection(Agent):
         self.road2 = road2
         self.road3 = road3
         self.road4 = road4
-        self.tlights = []
-        self.scores= {'tf1': {'points': 0, 'car_platoon': 0}, 'tf2': {'points': 0, 'car_platoon': 0}, 'tf3': {'points': 0, 'car_platoon': 0}, 'tf4': {'points': 0, 'car_platoon': 0}}
+        self.tlights = [] # Lista para armazenar os semáforos associados à interseção
+        self.scores= {'tf1': {'points': 0, 'car_platoon': 0}, 'tf2': {'points': 0, 'car_platoon': 0},
+                      'tf3': {'points': 0, 'car_platoon': 0}, 'tf4': {'points': 0, 'car_platoon': 0}}
         self.x = x
         self.y = y
         self.map = Map()
@@ -505,15 +585,18 @@ class Intersection(Agent):
 
 
     def add_tlight(self, tlight):
+        # Método para adicionar um semáforo à lista de semáforos
         self.tlights.append(tlight)
 
 
     def addcoord(self):
+         # Método para atualizar as coordenadas da interseção no mapa
         for i in range(len(self.x)):
             self.map.update_intersections(self.x[i], self.y[i], self.name)
 
 
     def change(self, color1, color2):
+        # Método para alterar as cores dos semáforos com base nas cores fornecidas
         if color1 == 'Green':
             color1left = 'Intermitent'
         elif color1 == 'Yellow':
@@ -539,6 +622,7 @@ class Intersection(Agent):
 
 
     def askedChange(self):
+        # Método para verificar se algum semáforo está à espera de mudar de cor
         for i in range(len(self.tlights)):
             if self.tlights[i].waiting == True:
                 self.tlights[i].waiting = False
@@ -546,12 +630,14 @@ class Intersection(Agent):
 
 
     def find_tlight(self, id):
+        # Método para encontrar um semáforo com base no id
         for i in range(len(self.tlights)):
             if str(self.tlights[i].id).lower() == str(id).lower():
                 return self.tlights[i]
 
 
     def find_tlight_by_score(self, score):
+        # Método para encontrar um semáforo com base na pontuação
         if score == 'tf1' and len(self.tlights) > 0 and self.road1 is not None: 
             tlight=self.find_tlight_by_road(self.road1.name)
             return tlight
@@ -569,30 +655,34 @@ class Intersection(Agent):
 
 
     def find_tlight_by_road(self, road):
+        # Método para encontrar um semáforo com base na estrada em que se encontra
         for tl in self.tlights:
             if str(tl.road.name).lower() == str(road).lower():
                 return tl
 
 
     def tlight_with_more_points(self):
+        # Método para encontrar o semáforo com mais pontos
         max_points = 0
         tlight_to_change = None
         reaction_time = 0
-        for score in self.scores:
+        for score in self.scores: # Procura o semáforo com mais pontos
             if self.scores[score]['points'] >= max_points:
                 max_points = self.scores[score]['points']
                 tlight_to_change = self.find_tlight_by_score(score)
                 reaction_time = self.scores[score]['car_platoon']
-        return {'tlight': tlight_to_change, 'reaction_time': reaction_time}
+        return {'tlight': tlight_to_change, 'reaction_time': reaction_time} # Retorna o semáforo com mais pontos
 
 
     def clear_scores(self):
+        # Método para limpar as pontuações
         for score in self.scores:
             self.scores[score]['points'] = 0
             self.scores[score]['car_platoon'] = 0
 
 
     async def setup(self):
+        # Configuração inicial do agente Intersection
         b = self.Intersection(self)
         self.add_behaviour(b)
         await self.behaviours[0].run()
@@ -605,6 +695,7 @@ class Intersection(Agent):
         
 
         async def change_by_tlight(self, tlight):
+            # Método para alterar as cores dos semáforos com base no semáforo fornecido
             if tlight is not None:
                 if tlight.road == self.agent.road1 or tlight.road == self.agent.road3:
                     if (tlight.colorfront == 'Yellow') and (tlight.colorleft == 'Yellow'):
@@ -636,6 +727,7 @@ class Intersection(Agent):
 
 
         async def receiveMessage(self):
+            # Método para receber mensagens
             msg = await self.receive(timeout = 0.01)
             if msg:
                 print(f"{self.agent.id} receive message from {msg.sender} with content: {msg.body} --")
@@ -647,6 +739,7 @@ class Intersection(Agent):
             
 
         async def arrange_scores(self, scores):
+            # Método para organizar as pontuações recebidas
             tlight = self.agent.find_tlight(scores['sender'])
             if tlight is not None:
                 if str(tlight.road.name).lower() == str(self.agent.road1.name).lower():
@@ -665,6 +758,7 @@ class Intersection(Agent):
                     
 
         async def print_scores(self):
+            # Método para imprimir as pontuações
             print("+---------------------------------------------+")
             print(f"| {self.agent.road1.name} | {self.agent.road2.name}              |")
             print(f"| {self.agent.id} Scores:                  |")
@@ -674,6 +768,7 @@ class Intersection(Agent):
 
 
         async def run(self):
+            # Método principal do comportamento cíclico da interseção
             time = 0 
             while True:
                 if time == 0:
@@ -704,6 +799,7 @@ class Intersection(Agent):
 
 
 class Car(Agent):
+    # Inicialização do agente veículo
     def __init__(self, car_id, x, y):
         Agent.__init__(self, car_id, "password")
         self.car_id = car_id
@@ -714,6 +810,7 @@ class Car(Agent):
 
 
     async def setup(self):
+        # Configuração inicial do agente Car
         class CarInteraction(CyclicBehaviour):
             def __init__(self, agent, msg, map):
                 super().__init__()
@@ -725,12 +822,14 @@ class Car(Agent):
 
 
             def move(self, x, y):
+                # Método para atualizar a posição do veículo no mapa
                 self.agent.x = int(x)
                 self.agent.y = int(y)
                 self.agent.map.update_vehicles(self.agent.x, self.agent.y, self.car_id)
 
 
             def travel(self):
+                # Método para calcular o próximo movimento do veículo (escolha aleatória)
                 whatsnextlanes = self.map.WhatsNextLane(self.agent.x, self.agent.y)
                 if whatsnextlanes is not None:
                     nextmove = random.choice(whatsnextlanes)
@@ -739,62 +838,64 @@ class Car(Agent):
 
 
             def IsThereTrafficLight(self, nextmove):
+                # Método para verificar se há um semáforo na próxima posição
                 if self.map.IsThereTrafficLight(nextmove[0], nextmove[1]) is not False:
-                    # check if there is a traffic light in the next position
                     tl_id = self.map.IsThereTrafficLight(nextmove[0], nextmove[1])
                     for tl in env.traffic_lights:
                         if tl.id == tl_id:
                             if tl.get_color() == 'Red':
-                                # if the traffic light is red, the car will wait
+                                # Se o semáforo estiver vermelho, o carro espera
                                 while tl.get_color() == 'Red':
                                     return {'isThere': True, 'id': tl.id}
                                 break
                             elif tl.get_color() == 'Yellow':
-                                # if the traffic light is yellow, the car will wait
+                                # Se o semáforo estiver amarelo, o carro espera
                                 while tl.get_color() == 'Yellow':
                                     return {'isThere': True, 'id': tl.id}
                                 break
                             else:
-                                # if the traffic light is green, the car will move
+                                # Se o semáforo estiver verde, o carro passa
                                 return {'isThere': False, 'id': tl.id}
                             
 
             def IsThereCarRight(self, nextmove):
-                # check if there is a car in the next position or at the right of the next position, so see the current position and the next to see what is going to be the right
-                # the right of the next position should have priority so return true if there is a car in the right of the next position
-                # to find the right of the next position, we need to see the current position and the next position, build a vector to find the direction of the movement, ot then see whats on the right
+                # # Método para verificar se há um carro à direita do próximo movimento
                 vector = (nextmove[0] - self.agent.x, nextmove[1] - self.agent.y)
                 newxplus = nextmove[0] + 1
                 newyplus = nextmove[1] + 1
                 newxminus = nextmove[0] - 1
                 newyminus = nextmove[1] - 1
 
+                # Determina a direção do movimento com base no vetor
                 if vector == (0, 1):
-                    # going up (down visually)
+                    # a ir para cima (mas visualmente para baixo)
                     if (newxminus < 0): return False
                     if self.map.IsThereCar(nextmove[0] - 1, nextmove[1]) is not False and self.map.isThereEmergency(nextmove[0] - 1, nextmove[1]) is not False:
                         return True
                 elif vector == (0, -1):
-                    # going down (up visually)
+                    # a ir para baixo (mas visualmente para cima)
                     if (newxplus >= SIZE): return False
                     if self.map.IsThereCar(nextmove[0] + 1, nextmove[1]) is not False and self.map.isThereEmergency(nextmove[0] + 1, nextmove[1]) is not False:
                         return True
                 elif vector == (1, 0):
-                    # going right
+                    # a ir para a direita
                     if (newyplus >= SIZE): return False
                     if self.map.IsThereCar(nextmove[0], nextmove[1] + 1) is not False and self.map.isThereEmergency(nextmove[0], nextmove[1] + 1) is not False:
                         return True
                 elif vector == (-1, 0):
-                    # going left
+                    # ir para a esquerda
                     if (newyminus < 0): return False
                     if self.map.IsThereCar(nextmove[0], nextmove[1] - 1) is not False and self.map.isThereEmergency(nextmove[0], nextmove[1] - 1) is not False:
-                        return True        
+                        return True    
+
+                # Verifica se há um carro na posição do próximo movimento
                 if self.map.IsThereCar(nextmove[0], nextmove[1]) is not False:
                     return True
                 return False
             
-
+            
             async def run(self):
+                # Método principal do comportamento cíclico do veículo
                 waiting_time = 0
                 while True:
                     nextmove = self.travel()
@@ -811,6 +912,7 @@ class Car(Agent):
                                     await asyncio.sleep(1)
                                     continue
                                 else:
+                                    # Carro espera que o carro à direita se mova
                                     #print(f"Car {self.car_id} is waiting for the car(s) passing by")
                                     await asyncio.sleep(1)
                                     continue
@@ -824,18 +926,21 @@ class Car(Agent):
                                 await asyncio.sleep(1)
                                 continue
                         elif is_there_traffic_light is not None and is_there_traffic_light['isThere'] is True:
+                            # Carro espera pelo semáforo mudar de cor para passar
                             #print(f"Car {self.car_id} is waiting for the traffic light to change")
                             waiting_time += 1
                             await self.reporting_waiting_time(waiting_time, is_there_traffic_light['id'])
                             await asyncio.sleep(1)
                             continue
                     else:
+                        # Aguarda quando não é encontrado um caminho 
                         #print(f"No road finded, car {self.agent.car_id} is waiting")
                         await asyncio.sleep(1)
                         continue
 
 
             async def receiveMessage(self):
+                # Método para receber mensagens
                 msg = await self.receive(timeout = 0.01) 
                 if msg:
                     print(f"{self.agent.car_id} received a message with content: {msg.body} from {msg.sender}")
@@ -848,6 +953,8 @@ class Car(Agent):
 
                 
             async def reporting_waiting_time(self, waiting_time, agentDestination):
+                # Método para enviar o tempo de espera para o agente de destino
+                global analise_times
                 msg = Message(to = agentDestination, sender = self.car_id)
                 previous_cars = await self.receiveMessage()
                 if previous_cars is not None:
@@ -855,18 +962,23 @@ class Car(Agent):
                 else:
                     previous_cars = []
                     previous_cars.append(waiting_time)
-
+                if (agentDestination.startswith("TLAgent")):
+                    for element in previous_cars:
+                        analise_times.append(element)
+                    
                 msg.set_metadata("performative", "inform")
                 msg.body = str(previous_cars)
                 #print(str(msg.sender) + " ->->->->->->->->-> " + str(msg.to) + "   Body: " + str(msg.body))
                 await self.send(msg)
  
+        # Adiciona o comportamento ao agente
         self.add_behaviour(CarInteraction(self, None, self.map))
         await self.behaviours[0].run()
 
 
 
 class EmergencyVehicle(Agent):
+    # Inicialização do agente veículo de emergência
     def __init__(self, id, x, y):
         Agent.__init__(self, id, "password")
         self.id = id
@@ -877,6 +989,7 @@ class EmergencyVehicle(Agent):
 
 
     def move(self, x, y):
+        # Atualiza a posição do veículo de emergência no mapa
         self.map.update_emergency(self.x, self.y, 0)
         self.x = x
         self.y = y
@@ -884,6 +997,7 @@ class EmergencyVehicle(Agent):
 
 
     def IsThereTrafficLight(self, nextmove):
+        # Verifica se há um semáforo na próxima posição
         if self.map.IsThereTrafficLight(nextmove[0], nextmove[1]) is not False:
             # check if there is a traffic light in the next position
             tl_id = self.map.IsThereTrafficLight(nextmove[0], nextmove[1])
@@ -898,6 +1012,7 @@ class EmergencyVehicle(Agent):
 
 
     def isThereCarRight(self, nextmove):
+        # Verifica se há um carro à direita do próximo movimento
         vector = (nextmove[0] - self.x, nextmove[1] - self.y)
         newxplus = nextmove[0] + 1
         newyplus = nextmove[1] + 1
@@ -905,31 +1020,34 @@ class EmergencyVehicle(Agent):
         newyminus = nextmove[1] - 1
 
         if vector == (0, 1):
-            # going up (down visually)
+            # a ir para cima (mas visualmente para baixo)
             if (newxminus < 0): return False
             if self.map.IsThereCar(nextmove[0] - 1, nextmove[1]) is not False and self.map.isThereEmergency(nextmove[0] - 1, nextmove[1]) is not False:
                 return True
         elif vector == (0, -1):
-            # going down (up visually)
+            # a ir para baixo (mas visualmente para cima)
             if (newxplus >= SIZE): return False
             if self.map.IsThereCar(nextmove[0] + 1, nextmove[1]) is not False and self.map.isThereEmergency(nextmove[0] + 1, nextmove[1]) is not False:
                 return True
         elif vector == (1, 0):
-            # going right
+            # a ir para a direita
             if (newyplus >= SIZE): return False
             if self.map.IsThereCar(nextmove[0], nextmove[1] + 1) is not False and self.map.isThereEmergency(nextmove[0], nextmove[1] + 1) is not False:
                 return True
         elif vector == (-1, 0):
-            # going left
+            # ir para a esquerda
             if (newyminus < 0): return False
             if self.map.IsThereCar(nextmove[0], nextmove[1] - 1) is not False and self.map.isThereEmergency(nextmove[0], nextmove[1] - 1) is not False:
-                return True        
+                return True
+        
+        # Verifica se há um carro na próxima posição e se há uma emergência      
         if self.map.IsThereCar(nextmove[0], nextmove[1]) is not False and self.map.isThereEmergency(nextmove[0], nextmove[1]) is not False:
             return True
         return False
     
 
     def emergency_call(self):
+        # Gera uma chamada de emergência em uma posição aleatória
         x = random.randint(0, SIZE-1)
         y = random.randint(0, SIZE-1)
         while lanes_grid[x][y] is None:
@@ -940,6 +1058,7 @@ class EmergencyVehicle(Agent):
 
 
     async def setup(self):
+        # Configuração inicial do agente EmergencyVehicle
         b = self.EmergencyInteraction(self, env.central_control.id)
         self.add_behaviour(b)
         await self.behaviours[0].run()
@@ -953,6 +1072,7 @@ class EmergencyVehicle(Agent):
 
 
         async def send_route(self, route):
+            # Envia a rota para o agente de controle central
             receiver = str(self.central_control)
             msg = Message(to = receiver , sender = self.agent.id)
             msg.set_metadata("performative", "inform")
@@ -962,6 +1082,7 @@ class EmergencyVehicle(Agent):
 
 
         async def send_position(self):
+            # Envia a posição atual para o agente de controle central
             receiver = str(self.central_control)
             msg = Message(to = receiver , sender = self.agent.id)
             msg.set_metadata("performative", "inform")
@@ -971,6 +1092,7 @@ class EmergencyVehicle(Agent):
 
 
         async def run(self):
+            # Método principal do comportamento cíclico do veículo de emergência
             flag = 0
             route = []
             while True:
@@ -992,10 +1114,10 @@ class EmergencyVehicle(Agent):
                     while i < len(route):
                         if pen==1:
                             pen=0
-                            i-=1
+                            i -= 1
                         newx = route[i][0]
                         newy = route[i][1]
-                        if (i+1) < len(route):
+                        if (i + 1) < len(route):
                             nextPosition = (route[i][0], route[i][1])
                             tlightahead = not self.agent.IsThereTrafficLight(nextPosition)
                         else :
@@ -1008,7 +1130,7 @@ class EmergencyVehicle(Agent):
                             await self.send_position()
                             await asyncio.sleep(1)
                             pen=1
-                        i+=1
+                        i += 1
                     flag = 0                        
                 print (f"Emergency Vehicle {self.agent.id} arrived at the destination to help")
                 await asyncio.sleep(1)
@@ -1016,6 +1138,7 @@ class EmergencyVehicle(Agent):
 
 
 class CentralControl(Agent):
+    # Inicialização do agente de controle central
     def __init__(self, id):
         Agent.__init__(self, id, "password")
         self.id = id
@@ -1023,6 +1146,7 @@ class CentralControl(Agent):
   
 
     async def setup(self):
+        # Configuração inicial do agente CentralControl
         b = self.CentralControlInteraction(self)
         self.add_behaviour(b)
         await self.behaviours[0].run()
@@ -1035,6 +1159,7 @@ class CentralControl(Agent):
 
 
         async def receiveMessage(self):
+            # Método para receber mensagens
             msg = await self.receive(timeout = 0.1)
             if msg:
                 print(f"Central Control {self.agent.id} received a message with content: {msg.body}")
@@ -1047,6 +1172,7 @@ class CentralControl(Agent):
 
 
         async def receive_position(self):
+            # Método para receber a posição atual do veículo de emergência
             msg = await self.receive(timeout = 0.1)
             if msg:
                 print(f"Central Control {self.agent.id} received a message with content: {msg.body} from {msg.sender}")
@@ -1059,17 +1185,20 @@ class CentralControl(Agent):
 
 
         async def alert_TLight(self, tlight, distance):
+            # Método para alertar o semáforo mais próximo do veículo de emergência
             msg = Message(to = tlight, sender = self.agent.id)
             msg.set_metadata("performative", "inform")
-            toSend = [100, 100, 100, 100] # default with 4 cars meaning 8 seconds to keep the light green
-            for i in range(distance):
-                toSend[0]+=100 # 100 points in case there is another emergency vehicle in the same road and valorize the emergency vehicle that is closer to the intersection
+            toSend = [100, 100, 100, 100] # 100 é o valor máximo, então se o semáforo receber 100, não mudará de cor
+            for _ in range(distance):
+                toSend[0] += 100 
             msg.body = str(toSend)
             await self.send(msg)
 
 
         async def run(self):
+            # Método principal do comportamento cíclico do agente de controle central
             while True:
+                # aguarda a receção de uma rota
                 route = await self.receiveMessage()
                 if route is not None:
                     i = 1
@@ -1077,26 +1206,25 @@ class CentralControl(Agent):
                         if isinstance(route[i], (list, tuple)) and len(route[i]) >= 2:
                             x = route[i][0]
                             y = route[i][1]
-                            # receive the position from the emergency vehicle and see if the emergency vehicle is close to a traffic light
+                            # Recebe a posição do veículo de emergência e verifica se está perto de um semáforo
                             position = await self.receive_position()
                             if self.agent.map.IsThereTrafficLight(x, y) is not None:
                                 if position is not None:
                                     if position[0] == x and position[1] == y:
                                         i += 1
                                         continue
-                                    # distance equals the number of indices between the emergency vehicle and the traffic light, so find the index of the traffic light in the route minus the position of the emergency vehicle
+                                    # A distância é igual ao número de índices entre o veículo de emergência e o semáforo, então encontre o índice do semáforo na rota menos a posição do veículo de emergência
                                     try:
                                         distance =  route.index((x, y)) - route.index(position)
                                     except ValueError:
                                         print(f"Position {position} not found in route")
                                         distance = 8
-                                    # if the distance is equals 8 or less, the emergency vehicle is close to the traffic light, so alert the traffic light
+                                    # Se a distância for menor ou igual a 8, o veículo de emergência está perto do semáforo, então alerte o semáforo
                                     if distance <= 8:
                                         tl_id = self.agent.map.IsThereTrafficLight(x, y)
                                         if tl_id is not None:
                                             await self.alert_TLight(tl_id, 8 - distance)
                                     
-                                # if there is a traffic light in the next position, alert the traffic light 
                                     await asyncio.sleep(0.5)
                                     continue
                                 continue
@@ -1110,17 +1238,20 @@ class CentralControl(Agent):
 
 class Lane:
     def __init__(self, lane_id):
+        # Inicialização de uma faixa de trânsito
         self.lane_id = lane_id
-        self.cars = []
-        self.lane = []
+        self.cars = [] # lista de carros na faixa de trânsito
+        self.lane = [] # lista de coordenadas da faixa de trânsito
         self.map = Map()
 
 
     def add_car(self, car):
+        # Adiciona um carro à faixa de trânsito
         self.cars.append(car)
 
 
     def add_lane(self, *args):
+        # Adiciona coordenadas à faixa de trânsito
         for lane_coord in args:
             self.lane.append(lane_coord)
             x, y = lane_coord
@@ -1128,7 +1259,7 @@ class Lane:
 
 
     def next_position(self, x, y):
-        # get the next position from the lane id
+        # Retorna a próxima posição na faixa de trânsito com base na posição atual
         for i in range(len(self.lane)):
             if int(self.lane[i][0]) == int(x) and int(self.lane[i][1]) == int(y):
                 if (i + 1) == len(self.lane):
@@ -1140,22 +1271,26 @@ class Lane:
 
 class Road:
     def __init__(self, name, num_lanes):
+        # Inicialização de uma estrada
         self.name = name
         self.lanes = [Lane(i) for i in range(num_lanes)]
         self.map = Map()
 
 
     def add_lane(self, lane):
+        # Adiciona uma faixa de trânsito à estrada
         self.lanes.append(lane)
 
 
 
 class Environment:
     def __init__(self):
+        # Inicialização do ambiente
         self.zoom_level = 1.0
         self.offset_x = 0
         self.offset_y = 0
 
+        # Inicialização das estradas
         road_1 = Road("Road_1", 2)
         road_2 = Road("Road_2", 2)
         road_3 = Road("Road_3", 2)
@@ -1164,13 +1299,13 @@ class Environment:
         road_6 = Road("Road_6", 2)
         road_7 = Road("Road_7", 2)
 
+        # Inicialização das faixas de trânsito
         lane1 = Lane(1)
         lane2 = Lane(2)
         lane3 = Lane(3)
         lane4 = Lane(4)
         lane5 = Lane(5)
-        lane6 = Lane(6)        #  *[ agent.start() for agent in env.cars ],
-
+        lane6 = Lane(6)
         lane7 = Lane(7)
         lane8 = Lane(8)
         lane9 = Lane(9)
@@ -1179,6 +1314,7 @@ class Environment:
         lane12 = Lane(12)
         lane13 = Lane(13)
         lane14 = Lane(14)
+
 
         lane1.add_lane((5,7), (6,7), (6,6), (6,5), (6,4), (6,3), (6,2), (6,1), (6,0), (5,0), (4,0), (3,0), (2,0), (1,0), (0,0), (0,1), (0,2), (0,3), (0,4), (0,5), (0,6), (0,7), (0,8), (0,9), (0,10), (0,11), (0,12), (0,13), (0,14), (0,15), (0,16), (0,17), (1,17), (2,17), (3,17), (4,17), (5,17), (6,17), (6,16))
         lane2.add_lane((6,16), (5,16), (4,16), (3,16), (2,16), (1,16), (1,15), (1,14), (1,13), (1,12), (1,11), (1,10), (1,9), (1,8), (1,7), (1,6), (1,5), (1,4), (1,3), (1,2), (1,1), (2,1), (3,1), (4,1), (5,1), (5,2), (5,3), (5,4), (5,5), (5,6), (5,7))
@@ -1216,6 +1352,7 @@ class Environment:
         road_7.add_lane(lane13)
         road_7.add_lane(lane14)
 
+        # Inicialização das interseções
         intersection_1 = Intersection("Intersection_1@localhost", road_1, road_2, road_5, None, (5, 5, 6, 6), (6, 7, 6, 7))
         intersection_2 = Intersection("Intersection_2@localhost", road_2, road_3, None, None, (12, 12, 13, 13), (6, 7, 6, 7))
         intersection_3 = Intersection("Intersection_3@localhost", road_1, road_5, road_6, road_7, (5, 5, 6, 6), (16, 17, 16, 17))
@@ -1228,6 +1365,7 @@ class Environment:
 
         self.lanes = [lane1, lane2, lane3, lane4, lane5, lane6, lane7, lane8, lane9, lane10, lane11, lane12, lane13, lane14]
 
+        # Inicialização dos semáforos
         trafficLight1 = TrafficLight("TLAgent-1@localhost", intersection_1, 'Green', 'Intermitent', road_1, 5, 5)
         trafficLight2 = TrafficLight("TLAgent-2@localhost", intersection_1, 'Red', 'Intermitent', road_2, 7, 6)
         trafficLight3 = TrafficLight("TLAgent-3@localhost", intersection_1, 'Green', 'Intermitent', road_5, 6, 8)
@@ -1264,6 +1402,7 @@ class Environment:
 
         self.traffic_lights = [trafficLight1, trafficLight2, trafficLight3, trafficLight4, trafficLight5, trafficLight6, trafficLight7, trafficLight8, trafficLight9, trafficLight10, trafficLight11, trafficLight12, trafficLight13, trafficLight14, trafficLight15, trafficLight16]
 
+        # Inicialização dos veículos
         self.car1 = Car("Vehicle-1@localhost", 0, 0)
         self.car2 = Car("Vehicle-2@localhost", 2, 1)
         self.car3 = Car("Vehicle-3@localhost", 5, 4)
@@ -1287,8 +1426,10 @@ class Environment:
 
         self.cars = [self.car1, self.car2, self.car3, self.car4, self.car5, self.car6, self.car7, self.car8, self.car9, self.car10,self.car11, self.car12, self.car13, self.car14, self.car15, self.car16, self.car17, self.car18, self.car19, self.car20]
         
+        # Inicialização do agente de controle central
         self.central_control = CentralControl("CentralControl@localhost")
 
+        # Inicialização do veículo de emergência
         self.emergency1 = EmergencyVehicle("EmergencyVehicle-1@localhost", 18,11)
 
         self.emergency_vehicles = [self.emergency1]
@@ -1297,11 +1438,7 @@ class Environment:
 
         self.create_message()
 
-
-    def zoom_in(self):
-        self.zoom_level *= 1.1
-
-
+    # Método para criar uma mensagem
     def create_message(self):
         message_dict[str(self.central_control.id).lower()].append('')
         
@@ -1316,26 +1453,32 @@ class Environment:
         
         for emergency in self.emergency_vehicles:
             message_dict[str(emergency.id).lower()].append('')
-            
     
+
+    # Método para aumentar o zoom do ambiente
+    def zoom_in(self):
+        self.zoom_level *= 1.1
+
+
+    # Método para diminuir o zoom do ambiente
     def zoom_out(self):
         self.zoom_level /= 1.1
 
-
+    # Método para mover o ambiente
     def pan(self, delta_x, delta_y):
         self.offset_x += delta_x
         self.offset_y += delta_y
 
-
+    # Método para adicionar uma estrada
     def add_road(self, road):
         self.roads.append(road)
 
-
+    # Método para adicionar uma interseção
     def add_intersection(self, intersection):
         self.intersections.append(intersection)
 
 
-    # displays the environment.
+    # Método para exibir o ambiente
     def display(self):
         for road in self.roads:
             print(f"{road.name}: ", end='')
@@ -1358,8 +1501,8 @@ if __name__ == "__main__":
 
     async def main():
         simulation_task = asyncio.create_task(env.map.draw_map())
-        await asyncio.gather(*[ agent.start() for agent in env.cars ],*[intersection.start() for intersection in env.intersections], *[tlight.start() for tlight in env.traffic_lights],env.central_control.start(), *[emergencyV.start() for emergencyV in env.emergency_vehicles ] , simulation_task)
+        analysis_task = asyncio.create_task(env.map.statiscs())
 
+        await asyncio.gather(*[ agent.start() for agent in env.cars ],*[intersection.start() for intersection in env.intersections], *[tlight.start() for tlight in env.traffic_lights],env.central_control.start(), *[emergencyV.start() for emergencyV in env.emergency_vehicles ] , simulation_task, analysis_task)
         await spade.wait_until_finished(*[ agent for agent in env.cars ])
-
     spade.run(main())
