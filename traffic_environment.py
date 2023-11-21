@@ -237,7 +237,6 @@ class Map:
         double_click_threshold = 500
 
         siren = 0
-        screen = pygame.display.set_mode((screen_width, screen_height), pygame.RESIZABLE | pygame.SCALED)
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
